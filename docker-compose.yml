@@ -2,17 +2,22 @@ services:
   junocashd:
     container_name: juno-exchange-kit-junocashd
     platform: linux/amd64
+    image: juno-exchange-kit/junocashd:${JUNOCASH_VERSION:-0.9.7}
     build:
       context: .
       dockerfile: docker/junocashd/Dockerfile
       args:
-        JUNOCASH_VERSION: 0.9.7
+        JUNOCASH_VERSION: ${JUNOCASH_VERSION:-0.9.7}
+    environment:
+      JUNO_CHAIN: ${JUNO_CHAIN:-regtest}
+      JUNO_DATADIR: /data
+      JUNO_RPC_USER: rpcuser
+      JUNO_RPC_PASS: rpcpass
+      JUNO_RPC_PORT: 8232
     command:
-      - -regtest
       - -server=1
       - -txindex=1
       - -daemon=0
-      - -listen=0
       - -printtoconsole=1
       - -datadir=/data
       - -rpcbind=0.0.0.0
@@ -21,21 +26,11 @@ services:
       - -rpcuser=rpcuser
       - -rpcpassword=rpcpass
     ports:
-      - "18232:8232"
+      - "${JUNO_RPC_PORT_HOST:-18232}:8232"
     volumes:
       - junocashd-data:/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "junocash-cli",
-          "-regtest",
-          "-datadir=/data",
-          "-rpcuser=rpcuser",
-          "-rpcpassword=rpcpass",
-          "-rpcport=8232",
-          "getblockcount",
-        ]
+      test: ["CMD", "juno-cli", "getblockcount"]
       interval: 2s
       timeout: 5s
       retries: 60
@@ -43,6 +38,7 @@ services:
   juno-broadcast:
     container_name: juno-exchange-kit-broadcast
     platform: linux/amd64
+    image: juno-exchange-kit/juno-broadcast:${JUNO_BROADCAST_REF:-0be86c29573ea9cd1993358e387686b534d212c8}
     build:
       context: .
       dockerfile: docker/juno-broadcast/Dockerfile
@@ -60,7 +56,7 @@ services:
       - --listen
       - 0.0.0.0:8080
     ports:
-      - "18081:8080"
+      - "${JUNO_BROADCAST_PORT_HOST:-18081}:8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 2s
@@ -70,6 +66,7 @@ services:
   juno-scan:
     container_name: juno-exchange-kit-scan
     platform: linux/amd64
+    image: juno-exchange-kit/juno-scan:${JUNO_SCAN_REF:-95c424b67aa6a8b6e69162bb56bedcfce2edde83}
     build:
       context: .
       dockerfile: docker/juno-scan/Dockerfile
@@ -88,7 +85,7 @@ services:
       JUNO_SCAN_DB_DRIVER: rocksdb
       JUNO_SCAN_DB_PATH: /data/db
     ports:
-      - "18080:8080"
+      - "${JUNO_SCAN_PORT_HOST:-18080}:8080"
     volumes:
       - junoscan-data:/data
     healthcheck:
@@ -100,4 +97,3 @@ services:
 volumes:
   junocashd-data:
   junoscan-data:
-

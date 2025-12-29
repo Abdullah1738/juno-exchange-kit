@@ -1,4 +1,4 @@
-.PHONY: build rust-build rust-test test test-unit test-integration test-e2e fmt tidy clean up down logs
+.PHONY: build rust-build rust-test test test-unit test-integration test-e2e fmt tidy clean docker-build up up-regtest up-testnet up-mainnet down logs
 
 TESTFLAGS ?=
 
@@ -11,6 +11,31 @@ BIN := $(BIN_DIR)/juno-exchange-kit
 
 RUST_MANIFEST := rust/keys/Cargo.toml
 DOCKER_COMPOSE := docker compose -f docker-compose.yml
+
+JUNOCASH_VERSION ?= 0.9.7
+JUNO_SCAN_REF ?= 95c424b67aa6a8b6e69162bb56bedcfce2edde83
+JUNO_BROADCAST_REF ?= 0be86c29573ea9cd1993358e387686b534d212c8
+
+JUNO_CHAIN ?= regtest
+
+JUNO_RPC_PORT_HOST ?= 18232
+JUNO_SCAN_PORT_HOST ?= 18080
+JUNO_BROADCAST_PORT_HOST ?= 18081
+
+ifeq ($(JUNO_CHAIN),regtest)
+JUNO_SCAN_UA_HRP ?= jregtest
+JUNO_SCAN_CONFIRMATIONS ?= 1
+else ifeq ($(JUNO_CHAIN),testnet)
+JUNO_SCAN_UA_HRP ?= jtest
+JUNO_SCAN_CONFIRMATIONS ?= 100
+else
+JUNO_SCAN_UA_HRP ?= j
+JUNO_SCAN_CONFIRMATIONS ?= 100
+endif
+
+JUNOCASHD_IMAGE := juno-exchange-kit/junocashd:$(JUNOCASH_VERSION)
+JUNO_SCAN_IMAGE := juno-exchange-kit/juno-scan:$(JUNO_SCAN_REF)
+JUNO_BROADCAST_IMAGE := juno-exchange-kit/juno-broadcast:$(JUNO_BROADCAST_REF)
 
 build: rust-build
 	@mkdir -p $(BIN_DIR)
@@ -45,11 +70,35 @@ clean:
 	rm -rf $(BIN_DIR)
 	rm -rf rust/keys/target
 
-up:
-	$(DOCKER_COMPOSE) up -d --build
+docker-build:
+	docker build --platform=linux/amd64 -t $(JUNOCASHD_IMAGE) --build-arg JUNOCASH_VERSION=$(JUNOCASH_VERSION) -f docker/junocashd/Dockerfile .
+	docker build --platform=linux/amd64 -t $(JUNO_BROADCAST_IMAGE) --build-arg JUNO_BROADCAST_REF=$(JUNO_BROADCAST_REF) -f docker/juno-broadcast/Dockerfile .
+	docker build --platform=linux/amd64 -t $(JUNO_SCAN_IMAGE) --build-arg JUNO_SCAN_REF=$(JUNO_SCAN_REF) -f docker/juno-scan/Dockerfile .
+
+up: docker-build
+	COMPOSE_BAKE=0 \
+	JUNOCASH_VERSION=$(JUNOCASH_VERSION) \
+	JUNO_CHAIN=$(JUNO_CHAIN) \
+	JUNO_RPC_PORT_HOST=$(JUNO_RPC_PORT_HOST) \
+	JUNO_SCAN_PORT_HOST=$(JUNO_SCAN_PORT_HOST) \
+	JUNO_BROADCAST_PORT_HOST=$(JUNO_BROADCAST_PORT_HOST) \
+	JUNO_SCAN_REF=$(JUNO_SCAN_REF) \
+	JUNO_SCAN_UA_HRP=$(JUNO_SCAN_UA_HRP) \
+	JUNO_SCAN_CONFIRMATIONS=$(JUNO_SCAN_CONFIRMATIONS) \
+	JUNO_BROADCAST_REF=$(JUNO_BROADCAST_REF) \
+	$(DOCKER_COMPOSE) up -d --no-build
+
+up-regtest:
+	$(MAKE) up JUNO_CHAIN=regtest
+
+up-testnet:
+	$(MAKE) up JUNO_CHAIN=testnet
+
+up-mainnet:
+	$(MAKE) up JUNO_CHAIN=mainnet
 
 down:
-	$(DOCKER_COMPOSE) down -v
+	COMPOSE_BAKE=0 $(DOCKER_COMPOSE) down -v
 
 logs:
-	$(DOCKER_COMPOSE) logs -f --tail=200
+	COMPOSE_BAKE=0 $(DOCKER_COMPOSE) logs -f --tail=200

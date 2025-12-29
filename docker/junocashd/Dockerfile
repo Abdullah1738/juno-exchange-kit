@@ -18,7 +18,10 @@ RUN curl -fsSLo "junocash-${JUNOCASH_VERSION}-linux64.tar.gz" "https://github.co
  && install -m 0755 "junocash-${JUNOCASH_VERSION}/bin/junocash-cli" /usr/local/bin/junocash-cli \
  && rm -rf /tmp/*
 
+COPY docker/junocashd/entrypoint.sh /usr/local/bin/junocashd-entrypoint
+COPY docker/junocashd/juno-cli /usr/local/bin/juno-cli
+RUN chmod 0755 /usr/local/bin/junocashd-entrypoint /usr/local/bin/juno-cli
+
 VOLUME ["/data"]
 
-ENTRYPOINT ["junocashd"]
-
+ENTRYPOINT ["junocashd-entrypoint"]

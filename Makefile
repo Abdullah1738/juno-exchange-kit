@@ -16,9 +16,16 @@ JUNOCASH_VERSION ?= 0.9.7
 JUNO_SCAN_REF ?= 95c424b67aa6a8b6e69162bb56bedcfce2edde83
 JUNO_BROADCAST_REF ?= 0be86c29573ea9cd1993358e387686b534d212c8
 
-JUNO_CHAIN ?= regtest
+NETWORK_GOAL := $(firstword $(filter mainnet testnet regtest,$(MAKECMDGOALS)))
 
-JUNO_RPC_PORT_HOST ?= 28232
+JUNO_CHAIN ?= regtest
+ifneq ($(NETWORK_GOAL),)
+ifeq ($(origin JUNO_CHAIN),file)
+JUNO_CHAIN := $(NETWORK_GOAL)
+endif
+endif
+
+JUNO_RPC_PORT_HOST ?= 18232
 JUNO_SCAN_PORT_HOST ?= 18080
 JUNO_BROADCAST_PORT_HOST ?= 18081
 
@@ -102,3 +109,7 @@ down:
 
 logs:
 	COMPOSE_BAKE=0 $(DOCKER_COMPOSE) logs -f --tail=200
+
+.PHONY: mainnet testnet regtest
+mainnet testnet regtest:
+	@:

@@ -18,15 +18,17 @@ It is intended to demonstrate and validate the full flow end-to-end:
 - Go 1.24+ and Rust (builds this binary and its key-derivation library)
 - `juno-txsign` (required for signing withdrawals/sweeps; set `JUNO_TXSIGN_BIN` to its path)
 
-## Start all dependencies (Docker, regtest)
+## Start all dependencies (Docker)
 
 Bring up `junocashd` + `juno-scan` + `juno-broadcast`:
 
+- `make up`
+
 Networks:
 
-- Regtest (default): `make up` or `make up-regtest`
-- Testnet: `make up-testnet`
-- Mainnet: `make up-mainnet` (will take significant time/disk to sync)
+- Regtest (default): `make up`, `make up regtest`, or `make up-regtest`
+- Testnet: `make up testnet` or `make up-testnet`
+- Mainnet: `make up mainnet` or `make up-mainnet` (will take significant time/disk to sync)
 
 Tear down (also removes volumes):
 
@@ -34,7 +36,7 @@ Tear down (also removes volumes):
 
 Defaults:
 
-- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-28232}` (user/pass: `rpcuser` / `rpcpass`)
+- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-18232}` (user/pass: `rpcuser` / `rpcpass`)
 - `juno-scan` API: `http://127.0.0.1:${JUNO_SCAN_PORT_HOST:-18080}`
 - `juno-broadcast` API: `http://127.0.0.1:${JUNO_BROADCAST_PORT_HOST:-18081}`
 
@@ -65,10 +67,22 @@ Build:
 
 - `make build` (outputs `bin/juno-exchange-kit`)
 
+## Data dir per network (important)
+
+The exchange kit stores keys + state in a local data dir. Do **not** reuse the same data dir across networks.
+
+Recommended:
+
+- Regtest: `export JUNO_EXCHANGE_KIT_DATA_DIR="$HOME/.juno-exchange-kit/regtest"`
+- Testnet: `export JUNO_EXCHANGE_KIT_DATA_DIR="$HOME/.juno-exchange-kit/testnet"`
+- Mainnet: `export JUNO_EXCHANGE_KIT_DATA_DIR="$HOME/.juno-exchange-kit/mainnet"`
+
+If you see a `jregtest1...` address while connected to mainnet, you are using a regtest-initialized data dir.
+
 Set env vars to point at the Docker stack:
 
 ```sh
-export JUNO_RPC_URL="http://127.0.0.1:28232"
+export JUNO_RPC_URL="http://127.0.0.1:18232"
 export JUNO_RPC_USER="rpcuser"
 export JUNO_RPC_PASS="rpcpass"
 

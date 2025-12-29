@@ -15,4 +15,3 @@ type Deriver interface {
 	UFVKFromSeedBase64(seedBase64 string, uaHRP string, coinType uint32, account uint32) (string, error)
 	AddressFromUFVK(ufvk string, uaHRP string, scope Scope, index uint32) (string, error)
 }
-

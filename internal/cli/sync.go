@@ -84,7 +84,7 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 	}
 
 	var out syncResult
-		for {
+	for {
 		page, err := sc.ListWalletEvents(ctx, walletID, cursor, 200)
 		if err != nil {
 			return syncResult{}, err

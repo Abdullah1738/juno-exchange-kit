@@ -42,14 +42,14 @@ type sweepDeps struct {
 	uaHRP    string
 	coinType uint32
 
-	hotWalletUFVK string
-	hotSeedPath   string
+	hotWalletUFVK  string
+	hotSeedPath    string
 	coldWalletUFVK string
 
-	rpc      *junocashd.Client
-	scan     *junoscan.Client
-	bcast    *junobroadcast.Client
-	deriver  keys.Deriver
+	rpc       *junocashd.Client
+	scan      *junoscan.Client
+	bcast     *junobroadcast.Client
+	deriver   keys.Deriver
 	txsignBin string
 }
 
@@ -113,17 +113,17 @@ func loadSweepDeps(ctx context.Context, dataDir string, rpc rpcFlags, services s
 	}
 
 	deps := &sweepDeps{
-		st:        st,
-		uaHRP:     uaHRP,
-		coinType:  uint32(coinTypeU64),
-		hotWalletUFVK: strings.TrimSpace(hot.UFVK),
-		hotSeedPath:   strings.TrimSpace(hot.SeedPath),
+		st:             st,
+		uaHRP:          uaHRP,
+		coinType:       uint32(coinTypeU64),
+		hotWalletUFVK:  strings.TrimSpace(hot.UFVK),
+		hotSeedPath:    strings.TrimSpace(hot.SeedPath),
 		coldWalletUFVK: strings.TrimSpace(cold.UFVK),
-		rpc:       junocashd.New(rpcURL, rpcUser, rpcPass),
-		scan:      sc,
-		bcast:     bc,
-		deriver:   keysffi.New(),
-		txsignBin: txsignBin,
+		rpc:            junocashd.New(rpcURL, rpcUser, rpcPass),
+		scan:           sc,
+		bcast:          bc,
+		deriver:        keysffi.New(),
+		txsignBin:      txsignBin,
 	}
 	return deps, cleanup, 0
 }

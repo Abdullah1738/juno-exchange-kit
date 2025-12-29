@@ -100,4 +100,3 @@ func signTxPlan(ctx context.Context, txsignBin string, seedPath string, plan typ
 
 	return txsignResult{TxID: txid, RawTxHex: raw, FeeZat: fee}, nil
 }
-

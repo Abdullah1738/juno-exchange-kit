@@ -15,4 +15,3 @@ func (d *Deriver) UFVKFromSeedBase64(seedBase64 string, uaHRP string, coinType u
 func (d *Deriver) AddressFromUFVK(ufvk string, uaHRP string, scope keys.Scope, index uint32) (string, error) {
 	return "", keys.ErrUnavailable
 }
-

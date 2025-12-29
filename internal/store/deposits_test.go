@@ -83,4 +83,3 @@ func TestApplyDeposit_ConfirmedThenUnconfirmed_AdjustsBalanceOnce(t *testing.T) 
 		t.Fatalf("bal=%d want %d", bal, 0)
 	}
 }
-

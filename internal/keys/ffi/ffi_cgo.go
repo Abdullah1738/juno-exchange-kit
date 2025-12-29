@@ -119,4 +119,3 @@ func (d *Deriver) AddressFromUFVK(ufvk string, uaHRP string, scope keys.Scope, i
 		return "", errors.New("keys: invalid response")
 	}
 }
-

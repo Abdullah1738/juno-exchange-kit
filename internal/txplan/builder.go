@@ -21,9 +21,9 @@ type Output struct {
 }
 
 type SendConfig struct {
-	RPC     *junocashd.Client
-	Scan    *junoscan.Client
-	Wallet  string
+	RPC      *junocashd.Client
+	Scan     *junoscan.Client
+	Wallet   string
 	CoinType uint32
 	Account  uint32
 

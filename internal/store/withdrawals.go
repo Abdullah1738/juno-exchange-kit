@@ -156,4 +156,3 @@ func (s *Store) ListWithdrawals(ctx context.Context, accountID string, limit int
 	}
 	return out, nil
 }
-

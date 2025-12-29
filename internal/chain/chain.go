@@ -49,4 +49,3 @@ func GetInfo(ctx context.Context, rpc *junocashd.Client) (Info, error) {
 		BranchID: uint32(branchU64),
 	}, nil
 }
-

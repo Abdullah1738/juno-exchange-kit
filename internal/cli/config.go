@@ -64,4 +64,3 @@ func (s *servicesFlags) resolvedBroadcastURL() string {
 	}
 	return strings.TrimSpace(os.Getenv("JUNO_BROADCAST_URL"))
 }
-

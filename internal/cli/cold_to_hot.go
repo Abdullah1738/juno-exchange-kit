@@ -341,4 +341,3 @@ func loadHexInput(rawHex, rawFile string) (string, error) {
 	}
 	return strings.TrimSpace(string(b)), nil
 }
-

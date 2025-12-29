@@ -38,6 +38,8 @@ func RunWithIO(args []string, stdout, stderr io.Writer) int {
 		return runWallet(args[1:], stdout, stderr)
 	case "balances":
 		return runBalances(args[1:], stdout, stderr)
+	case "daemon":
+		return runDaemon(args[1:], stdout, stderr)
 	case "sync":
 		return runSync(args[1:], stdout, stderr)
 	case "sweep":
@@ -70,6 +72,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  juno-exchange-kit wallet balance <wallet_id> [--minconf <n>] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit wallet addresses <wallet_id> [--scope external|internal|all] [--account <id>] [--limit <n>] [--offset <n>] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit balances [--minconf <n>] [--sync] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit daemon [--poll <dur>] [--once] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sync [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep consolidate [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep to-cold [--data-dir <dir>] [--json]")

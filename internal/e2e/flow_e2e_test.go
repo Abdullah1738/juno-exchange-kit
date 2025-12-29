@@ -272,6 +272,16 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	waitForHotNotesAtLeast(t, ctx, sc, 1)
 
 	// Withdraw should succeed now.
+	var balBefore struct {
+		Status string `json:"status"`
+		Data   struct {
+			BalanceZat          int64 `json:"balance_zat"`
+			PendingDepositsZat  int64 `json:"pending_deposits_zat"`
+			PendingDepositCount int64 `json:"pending_deposit_count"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &balBefore, "account", "balance", "--json", accountID)
+
 	var withdrawOK struct {
 		Status string `json:"status"`
 		Data   struct {
@@ -292,6 +302,24 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 		t.Fatalf("unexpected withdraw response: %+v", withdrawOK)
 	}
 	mustRunCLI(t, ctx, stack, "generate", "1")
+	mustRunKitOK(t, ctx, bin, env, nil, "sync", "--json")
+
+	var balAfter struct {
+		Status string `json:"status"`
+		Data   struct {
+			BalanceZat          int64 `json:"balance_zat"`
+			PendingDepositsZat  int64 `json:"pending_deposits_zat"`
+			PendingDepositCount int64 `json:"pending_deposit_count"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &balAfter, "account", "balance", "--json", accountID)
+	wantAfter := balBefore.Data.BalanceZat - 100000 - withdrawOK.Data.FeeZat
+	if balAfter.Data.BalanceZat != wantAfter {
+		t.Fatalf("unexpected post-withdraw balance: got=%d want=%d (fee=%d)", balAfter.Data.BalanceZat, wantAfter, withdrawOK.Data.FeeZat)
+	}
+	if balAfter.Data.PendingDepositsZat != 0 || balAfter.Data.PendingDepositCount != 0 {
+		t.Fatalf("unexpected pending deposits after withdraw: %+v", balAfter.Data)
+	}
 
 	// Withdrawals list includes the tx.
 	var listResp struct {

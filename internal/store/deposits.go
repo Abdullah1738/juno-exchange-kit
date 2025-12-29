@@ -194,6 +194,40 @@ func (s *Store) AccountForDiversifierIndex(ctx context.Context, walletID string,
 	return accountID, true, nil
 }
 
+func (s *Store) AccountForRecipientAddress(ctx context.Context, walletID string, recipientAddress string) (string, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return "", false, err
+	}
+	walletID = strings.TrimSpace(walletID)
+	if walletID == "" {
+		return "", false, errors.New("store: wallet_id required")
+	}
+	recipientAddress = strings.ToLower(strings.TrimSpace(recipientAddress))
+	if recipientAddress == "" {
+		return "", false, errors.New("store: recipient_address required")
+	}
+
+	var accountID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT account_id FROM deposit_addresses
+		WHERE wallet_id=? AND scope='external' AND address=?
+	`, walletID, recipientAddress).Scan(&accountID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return "", false, errors.New("store: invalid account_id mapping")
+	}
+	return accountID, true, nil
+}
+
 func (s *Store) GetScanCursor(ctx context.Context, walletID string) (int64, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -234,7 +268,7 @@ func (s *Store) SetScanCursor(ctx context.Context, walletID string, cursor int64
 	return err
 }
 
-func (s *Store) ApplyDeposit(ctx context.Context, walletID, txid string, actionIndex uint32, diversifierIndex uint32, amountZat int64, height int64, status DepositStatus, confirmedHeight *int64) (DepositApplyResult, error) {
+func (s *Store) ApplyDeposit(ctx context.Context, walletID, txid string, actionIndex uint32, diversifierIndex uint32, recipientAddress string, amountZat int64, height int64, status DepositStatus, confirmedHeight *int64) (DepositApplyResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -259,12 +293,21 @@ func (s *Store) ApplyDeposit(ctx context.Context, walletID, txid string, actionI
 		return DepositApplyResult{}, errors.New("store: invalid deposit status")
 	}
 
-	accountID, ok, err := s.AccountForDiversifierIndex(ctx, walletID, diversifierIndex)
-	if err != nil {
-		return DepositApplyResult{}, err
-	}
-	if !ok {
-		accountID = ""
+	recipientAddress = strings.ToLower(strings.TrimSpace(recipientAddress))
+
+	accountID := ""
+	if recipientAddress != "" {
+		if a, ok, err := s.AccountForRecipientAddress(ctx, walletID, recipientAddress); err != nil {
+			return DepositApplyResult{}, err
+		} else if ok {
+			accountID = a
+		}
+	} else {
+		if a, ok, err := s.AccountForDiversifierIndex(ctx, walletID, diversifierIndex); err != nil {
+			return DepositApplyResult{}, err
+		} else if ok {
+			accountID = a
+		}
 	}
 
 	now := time.Now().Unix()
@@ -276,19 +319,25 @@ func (s *Store) ApplyDeposit(ctx context.Context, walletID, txid string, actionI
 
 	var prevStatus string
 	var prevAccount sql.NullString
+	var prevAmount int64
 	err = tx.QueryRowContext(ctx, `
-		SELECT status, account_id
+		SELECT status, account_id, amount_zat
 		FROM deposits
 		WHERE wallet_id=? AND txid=? AND action_index=?
-	`, walletID, txid, actionIndex).Scan(&prevStatus, &prevAccount)
+	`, walletID, txid, actionIndex).Scan(&prevStatus, &prevAccount, &prevAmount)
 	found := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return DepositApplyResult{}, err
 	}
 
-	// Prefer the previously stored account_id if present.
-	if prevAccount.Valid && strings.TrimSpace(prevAccount.String) != "" {
-		accountID = strings.TrimSpace(prevAccount.String)
+	prevAccountID := ""
+	if prevAccount.Valid {
+		prevAccountID = strings.TrimSpace(prevAccount.String)
+	}
+
+	// For backwards compatibility: if we don't have recipient_address, keep the previously stored mapping.
+	if recipientAddress == "" && prevAccountID != "" {
+		accountID = prevAccountID
 	}
 
 	if !found {
@@ -316,28 +365,57 @@ func (s *Store) ApplyDeposit(ctx context.Context, walletID, txid string, actionI
 		}
 	}
 
-	var delta int64
+	var deltas []struct {
+		accountID string
+		deltaZat  int64
+	}
 	switch {
 	case prevStatus != string(DepositStatusConfirmed) && status == DepositStatusConfirmed:
 		if accountID != "" {
-			delta = amountZat
+			deltas = append(deltas, struct {
+				accountID string
+				deltaZat  int64
+			}{accountID: accountID, deltaZat: amountZat})
 		}
 	case prevStatus == string(DepositStatusConfirmed) && status != DepositStatusConfirmed:
-		if accountID != "" {
-			delta = -amountZat
+		if prevAccountID != "" {
+			deltas = append(deltas, struct {
+				accountID string
+				deltaZat  int64
+			}{accountID: prevAccountID, deltaZat: -prevAmount})
+		}
+	case prevStatus == string(DepositStatusConfirmed) && status == DepositStatusConfirmed:
+		if prevAccountID != accountID || prevAmount != amountZat {
+			if prevAccountID != "" {
+				deltas = append(deltas, struct {
+					accountID string
+					deltaZat  int64
+				}{accountID: prevAccountID, deltaZat: -prevAmount})
+			}
+			if accountID != "" {
+				deltas = append(deltas, struct {
+					accountID string
+					deltaZat  int64
+				}{accountID: accountID, deltaZat: amountZat})
+			}
 		}
 	}
 
-	if delta != 0 {
-		if err := applyAccountBalanceDeltaTx(ctx, tx, accountID, delta, now); err != nil {
+	var deltaSum int64
+	for _, d := range deltas {
+		if d.deltaZat == 0 || strings.TrimSpace(d.accountID) == "" {
+			continue
+		}
+		if err := applyAccountBalanceDeltaTx(ctx, tx, d.accountID, d.deltaZat, now); err != nil {
 			return DepositApplyResult{}, err
 		}
+		deltaSum += d.deltaZat
 	}
 
 	if err := tx.Commit(); err != nil {
 		return DepositApplyResult{}, err
 	}
-	return DepositApplyResult{AccountID: accountID, DeltaZat: delta}, nil
+	return DepositApplyResult{AccountID: accountID, DeltaZat: deltaSum}, nil
 }
 
 func applyAccountBalanceDeltaTx(ctx context.Context, tx *sql.Tx, accountID string, delta int64, nowUnix int64) error {

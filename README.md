@@ -111,7 +111,7 @@ Commands:
 - Wallet addresses: `bin/juno-exchange-kit wallet addresses <hot|cold> --scope external|internal|all`
 - Sweep hot balance to cold: `bin/juno-exchange-kit sweep to-cold`
 - Consolidate hot notes: `bin/juno-exchange-kit sweep consolidate` (reduces note count by sending to an internal hot address)
-- Withdraw: `bin/juno-exchange-kit withdraw --account <id> --to <j...> --amount-zat <n>`
+- Withdraw: `bin/juno-exchange-kit withdraw --account <id> --to <j...> --amount-zat <n> --wait-confirmations 1`
 - Cold → hot (offline flow): `bin/juno-exchange-kit cold-to-hot plan|sign|broadcast`
 - History: `bin/juno-exchange-kit withdrawals list`
 
@@ -126,6 +126,7 @@ Flow:
 3. `juno-exchange-kit sync` / `daemon` consumes those events:
    - pending deposits are recorded immediately
    - account credits (liabilities) only increase on `DepositConfirmed`
+   - credits only happen when the `recipient_address` matches a known external deposit address (change/internal notes are never credited)
 
 Visibility:
 

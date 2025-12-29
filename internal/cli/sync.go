@@ -102,7 +102,7 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return syncResult{}, errorsNew("invalid deposit payload")
 				}
-				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusDetected, nil)
+				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, p.RecipientAddress, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusDetected, nil)
 				if err != nil {
 					return syncResult{}, err
 				}
@@ -115,7 +115,7 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 					return syncResult{}, errorsNew("invalid deposit confirmed payload")
 				}
 				ch := p.ConfirmedHeight
-				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusConfirmed, &ch)
+				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, p.RecipientAddress, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusConfirmed, &ch)
 				if err != nil {
 					return syncResult{}, err
 				}
@@ -130,7 +130,7 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return syncResult{}, errorsNew("invalid deposit unconfirmed payload")
 				}
-				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusUnconfirmed, nil)
+				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, p.RecipientAddress, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusUnconfirmed, nil)
 				if err != nil {
 					return syncResult{}, err
 				}
@@ -142,7 +142,7 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return syncResult{}, errorsNew("invalid deposit orphaned payload")
 				}
-				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusOrphaned, nil)
+				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, p.RecipientAddress, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusOrphaned, nil)
 				if err != nil {
 					return syncResult{}, err
 				}

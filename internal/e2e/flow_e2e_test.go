@@ -93,7 +93,18 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	_ = mustWaitOpTxID(t, ctx, stack, opid)
 	mustRunCLI(t, ctx, stack, "generate", "1")
 
-	waitForCredit(t, ctx, bin, env)
+	mustRunKitOK(t, ctx, bin, env, nil, "account", "wait-deposit", accountID, "--timeout", "2m", "--poll", "200ms", "--json")
+
+	var balResp struct {
+		Status string `json:"status"`
+		Data   struct {
+			BalanceZat int64 `json:"balance_zat"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &balResp, "account", "balance", "--json", accountID)
+	if balResp.Data.BalanceZat <= 0 {
+		t.Fatalf("expected credited balance, got: %+v", balResp)
+	}
 
 	// Sweep hot funds to cold; account balance stays credited, but hot liquidity is gone.
 	mustRunKitOK(t, ctx, bin, env, nil, "sweep", "to-cold", "--wait-confirmations", "0", "--json")
@@ -217,34 +228,6 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	if insuff.Status != "err" || insuff.Error.Code != "insufficient_balance" || insuff.Error.Message != "INSUFFICIENT_BALANCE" {
 		t.Fatalf("expected INSUFFICIENT_BALANCE, got: %s", string(tooMuch))
 	}
-}
-
-func waitForCredit(t *testing.T, ctx context.Context, bin string, env map[string]string) {
-	t.Helper()
-
-	deadline := time.Now().Add(2 * time.Minute)
-	for time.Now().Before(deadline) {
-		out, _ := runKit(t, ctx, bin, env, nil, "sync", "--json")
-		var resp struct {
-			Status string `json:"status"`
-			Data   struct {
-				Wallets []struct {
-					WalletID string `json:"wallet_id"`
-					Credits  int64  `json:"credits"`
-				} `json:"wallets"`
-			} `json:"data"`
-			Error any `json:"error"`
-		}
-		if err := json.Unmarshal(out, &resp); err == nil && resp.Status == "ok" {
-			for _, w := range resp.Data.Wallets {
-				if w.WalletID == "hot" && w.Credits > 0 {
-					return
-				}
-			}
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatalf("timeout waiting for sync credits")
 }
 
 func waitForHotNotes(t *testing.T, ctx context.Context, sc *junoscan.Client, want int) {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,27 @@ func TestExchangeKit_InitAndRegisterWallets_Integration(t *testing.T) {
 		}
 		if !haveHot || !haveCold {
 			t.Fatalf("wallets not registered (hot=%v cold=%v): %+v", haveHot, haveCold, wallets)
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"account", "create"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("account create failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		accountID := strings.TrimSpace(stdout.String())
+		if accountID == "" {
+			t.Fatalf("missing account_id")
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"account", "balance", accountID}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("account balance failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		if strings.TrimSpace(stdout.String()) != "0" {
+			t.Fatalf("unexpected initial balance: %q", stdout.String())
 		}
 	})
 }

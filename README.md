@@ -36,7 +36,7 @@ Tear down (also removes volumes):
 
 Defaults:
 
-- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-18232}` (user/pass: `rpcuser` / `rpcpass`)
+- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-28232}` (user/pass: `rpcuser` / `rpcpass`)
 - `juno-scan` API: `http://127.0.0.1:${JUNO_SCAN_PORT_HOST:-18080}`
 - `juno-broadcast` API: `http://127.0.0.1:${JUNO_BROADCAST_PORT_HOST:-18081}`
 
@@ -82,7 +82,7 @@ If you see a `jregtest1...` address while connected to mainnet, you are using a 
 Set env vars to point at the Docker stack:
 
 ```sh
-export JUNO_RPC_URL="http://127.0.0.1:18232"
+export JUNO_RPC_URL="http://127.0.0.1:28232"
 export JUNO_RPC_USER="rpcuser"
 export JUNO_RPC_PASS="rpcpass"
 
@@ -99,6 +99,8 @@ Commands:
 - Init wallets + state: `bin/juno-exchange-kit init`
 - Create account: `bin/juno-exchange-kit account create`
 - Get deposit address: `bin/juno-exchange-kit account deposit-address <account_id>`
+- Balance: `bin/juno-exchange-kit account balance <account_id>`
+- Wait for confirmed deposit credit: `bin/juno-exchange-kit account wait-deposit <account_id>`
 - Sync/credit confirmed deposits: `bin/juno-exchange-kit sync`
 - Sweep hot balance to cold: `bin/juno-exchange-kit sweep to-cold`
 - Consolidate hot notes: `bin/juno-exchange-kit sweep consolidate`

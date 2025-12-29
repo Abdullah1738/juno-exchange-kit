@@ -59,6 +59,8 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  juno-exchange-kit init [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit account create [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit account deposit-address <account_id> [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit account balance <account_id> [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit account wait-deposit <account_id> [--min-balance-zat <n>] [--timeout <dur>] [--poll <dur>] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sync [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep consolidate [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep to-cold [--data-dir <dir>] [--json]")

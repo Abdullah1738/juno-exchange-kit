@@ -106,12 +106,113 @@ func TestExchangeKit_InitAndRegisterWallets_Integration(t *testing.T) {
 
 		stdout.Reset()
 		stderr.Reset()
+		code = cli.RunWithIO([]string{"account", "deposit-address", accountID, "--json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("account deposit-address failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		var depResp struct {
+			Status string `json:"status"`
+			Data   struct {
+				Address string `json:"address"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &depResp); err != nil || depResp.Status != "ok" || strings.TrimSpace(depResp.Data.Address) == "" {
+			t.Fatalf("deposit-address invalid json: %v\n%s", err, stdout.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"account", "list", "--json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("account list failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		var listResp struct {
+			Status string `json:"status"`
+			Data   struct {
+				Accounts []struct {
+					AccountID  string `json:"account_id"`
+					BalanceZat int64  `json:"balance_zat"`
+				} `json:"accounts"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &listResp); err != nil || listResp.Status != "ok" {
+			t.Fatalf("account list invalid json: %v\n%s", err, stdout.String())
+		}
+		found := false
+		for _, a := range listResp.Data.Accounts {
+			if a.AccountID == accountID && a.BalanceZat == 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("account list missing %s: %+v", accountID, listResp.Data.Accounts)
+		}
+
+		stdout.Reset()
+		stderr.Reset()
 		code = cli.RunWithIO([]string{"account", "balance", accountID}, &stdout, &stderr)
 		if code != 0 {
 			t.Fatalf("account balance failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
 		}
 		if strings.TrimSpace(stdout.String()) != "0" {
 			t.Fatalf("unexpected initial balance: %q", stdout.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"wallet", "balance", "hot", "--minconf", "0", "--json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("wallet balance failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"wallet", "addresses", "hot", "--scope", "external", "--json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("wallet addresses failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		var addrResp struct {
+			Status string `json:"status"`
+			Data   struct {
+				Addresses []struct {
+					AccountID string `json:"account_id"`
+					Address   string `json:"address"`
+				} `json:"addresses"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &addrResp); err != nil || addrResp.Status != "ok" {
+			t.Fatalf("wallet addresses invalid json: %v\n%s", err, stdout.String())
+		}
+		found = false
+		for _, a := range addrResp.Data.Addresses {
+			if a.AccountID == accountID && strings.TrimSpace(a.Address) == strings.TrimSpace(depResp.Data.Address) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("wallet addresses missing %s: %+v", depResp.Data.Address, addrResp.Data.Addresses)
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = cli.RunWithIO([]string{"balances", "--minconf", "0", "--json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("balances failed: code=%d\nstderr=%s\nstdout=%s", code, stderr.String(), stdout.String())
+		}
+		var balAll struct {
+			Status string `json:"status"`
+			Data   struct {
+				AssetsZat      int64 `json:"assets_zat"`
+				LiabilitiesZat int64 `json:"liabilities_zat"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &balAll); err != nil || balAll.Status != "ok" {
+			t.Fatalf("balances invalid json: %v\n%s", err, stdout.String())
+		}
+		if balAll.Data.AssetsZat != 0 || balAll.Data.LiabilitiesZat != 0 {
+			t.Fatalf("unexpected balances: %+v", balAll.Data)
 		}
 	})
 }

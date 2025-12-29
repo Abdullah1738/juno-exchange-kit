@@ -73,6 +73,27 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	}
 	accountID := strings.TrimSpace(accountResp.Data.AccountID)
 
+	var listAccounts struct {
+		Status string `json:"status"`
+		Data   struct {
+			Accounts []struct {
+				AccountID  string `json:"account_id"`
+				BalanceZat int64  `json:"balance_zat"`
+			} `json:"accounts"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &listAccounts, "account", "list", "--json")
+	found := false
+	for _, a := range listAccounts.Data.Accounts {
+		if strings.EqualFold(a.AccountID, accountID) && a.BalanceZat == 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("account list missing %s: %+v", accountID, listAccounts.Data.Accounts)
+	}
+
 	var depositAddrResp struct {
 		Status string `json:"status"`
 		Data   struct {
@@ -85,6 +106,28 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	depositAddr := strings.TrimSpace(depositAddrResp.Data.Address)
 	if !strings.HasPrefix(depositAddr, "jregtest1") {
 		t.Fatalf("unexpected deposit address: %q", depositAddr)
+	}
+
+	var walletAddrResp struct {
+		Status string `json:"status"`
+		Data   struct {
+			Addresses []struct {
+				Scope     string `json:"scope"`
+				AccountID string `json:"account_id"`
+				Address   string `json:"address"`
+			} `json:"addresses"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &walletAddrResp, "wallet", "addresses", "hot", "--scope", "external", "--json")
+	found = false
+	for _, a := range walletAddrResp.Data.Addresses {
+		if a.Scope == "external" && strings.EqualFold(a.AccountID, accountID) && strings.EqualFold(a.Address, depositAddr) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("wallet addresses missing deposit addr %s: %+v", depositAddr, walletAddrResp.Data.Addresses)
 	}
 
 	// Fund the deposit by shielding coinbase directly to the deposit address.
@@ -106,6 +149,32 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 		t.Fatalf("expected credited balance, got: %+v", balResp)
 	}
 
+	var walletBalHot struct {
+		Status string `json:"status"`
+		Data   struct {
+			TotalUnspentZat int64 `json:"total_unspent_zat"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &walletBalHot, "wallet", "balance", "hot", "--minconf", "0", "--json")
+	if walletBalHot.Data.TotalUnspentZat < balResp.Data.BalanceZat {
+		t.Fatalf("hot wallet unspent < liabilities: hot=%d liabilities=%d", walletBalHot.Data.TotalUnspentZat, balResp.Data.BalanceZat)
+	}
+
+	var balancesResp struct {
+		Status string `json:"status"`
+		Data   struct {
+			AssetsZat      int64 `json:"assets_zat"`
+			LiabilitiesZat int64 `json:"liabilities_zat"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &balancesResp, "balances", "--minconf", "0", "--json")
+	if balancesResp.Data.LiabilitiesZat != balResp.Data.BalanceZat {
+		t.Fatalf("unexpected liabilities: got=%d want=%d", balancesResp.Data.LiabilitiesZat, balResp.Data.BalanceZat)
+	}
+	if balancesResp.Data.AssetsZat < balancesResp.Data.LiabilitiesZat {
+		t.Fatalf("assets < liabilities: %+v", balancesResp.Data)
+	}
+
 	// Sweep hot funds to cold; account balance stays credited, but hot liquidity is gone.
 	mustRunKitOK(t, ctx, bin, env, nil, "sweep", "to-cold", "--wait-confirmations", "0", "--json")
 	mustRunCLI(t, ctx, stack, "generate", "1")
@@ -115,6 +184,23 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 		t.Fatalf("junoscan.New: %v", err)
 	}
 	waitForHotNotes(t, ctx, sc, 0)
+
+	mustRunKitOKInto(t, ctx, bin, env, nil, &walletBalHot, "wallet", "balance", "hot", "--minconf", "0", "--json")
+	if walletBalHot.Data.TotalUnspentZat != 0 {
+		t.Fatalf("expected hot wallet to be empty after sweep: %d", walletBalHot.Data.TotalUnspentZat)
+	}
+
+	waitForColdNotesAtLeast(t, ctx, sc, 1)
+	var walletBalCold struct {
+		Status string `json:"status"`
+		Data   struct {
+			TotalUnspentZat int64 `json:"total_unspent_zat"`
+		} `json:"data"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &walletBalCold, "wallet", "balance", "cold", "--minconf", "0", "--json")
+	if walletBalCold.Data.TotalUnspentZat <= 0 {
+		t.Fatalf("expected cold wallet to have funds after sweep: %+v", walletBalCold)
+	}
 
 	dest := mustCreateOrchardAddress(t, ctx, stack)
 
@@ -198,7 +284,7 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	}
 	mustRunKitOKInto(t, ctx, bin, env, nil, &listResp, "withdrawals", "list", "--account", accountID, "--json")
 
-	found := false
+	found = false
 	for _, w := range listResp.Data.Withdrawals {
 		if w.TxID != nil && strings.EqualFold(*w.TxID, withdrawOK.Data.TxID) {
 			found = true
@@ -256,6 +342,20 @@ func waitForHotNotesAtLeast(t *testing.T, ctx context.Context, sc *junoscan.Clie
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("timeout waiting for hot notes >= %d", min)
+}
+
+func waitForColdNotesAtLeast(t *testing.T, ctx context.Context, sc *junoscan.Client, min int) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Minute)
+	for time.Now().Before(deadline) {
+		notes, err := sc.ListWalletNotes(ctx, "cold", true)
+		if err == nil && len(notes) >= min {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for cold notes >= %d", min)
 }
 
 func mustRunCLI(t *testing.T, ctx context.Context, stack *testutil.Stack, args ...string) []byte {

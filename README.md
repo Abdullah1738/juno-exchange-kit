@@ -100,10 +100,14 @@ Commands:
 - Create account: `bin/juno-exchange-kit account create`
 - Get deposit address: `bin/juno-exchange-kit account deposit-address <account_id>`
 - Balance: `bin/juno-exchange-kit account balance <account_id>`
+- List accounts + balances: `bin/juno-exchange-kit account list`
 - Wait for confirmed deposit credit: `bin/juno-exchange-kit account wait-deposit <account_id>`
 - Sync/credit confirmed deposits: `bin/juno-exchange-kit sync`
+- Exchange balances (assets vs liabilities): `bin/juno-exchange-kit balances`
+- Wallet balance (hot/cold): `bin/juno-exchange-kit wallet balance <hot|cold>`
+- Wallet addresses: `bin/juno-exchange-kit wallet addresses <hot|cold> --scope external|internal|all`
 - Sweep hot balance to cold: `bin/juno-exchange-kit sweep to-cold`
-- Consolidate hot notes: `bin/juno-exchange-kit sweep consolidate`
+- Consolidate hot notes: `bin/juno-exchange-kit sweep consolidate` (reduces note count by sending to an internal hot address)
 - Withdraw: `bin/juno-exchange-kit withdraw --account <id> --to <j...> --amount-zat <n>`
 - Cold → hot (offline flow): `bin/juno-exchange-kit cold-to-hot plan|sign|broadcast`
 - History: `bin/juno-exchange-kit withdrawals list`

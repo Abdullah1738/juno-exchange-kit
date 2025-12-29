@@ -29,6 +29,8 @@ func runAccount(args []string, stdout, stderr io.Writer) int {
 		return runAccountBalance(args[1:], stdout, stderr)
 	case "wait-deposit":
 		return runAccountWaitDeposit(args[1:], stdout, stderr)
+	case "list":
+		return runAccountList(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "account: unknown subcommand: %s\n", args[0])
 		return 2
@@ -277,4 +279,73 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 		case <-time.After(poll):
 		}
 	}
+}
+
+func runAccountList(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("account list", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	var common commonFlags
+	common.bind(fs)
+
+	var limit int
+	var offset int
+	var minBalanceStr string
+	fs.IntVar(&limit, "limit", 100, "max rows (<= 1000)")
+	fs.IntVar(&offset, "offset", 0, "offset (>= 0)")
+	fs.StringVar(&minBalanceStr, "min-balance-zat", "", "optional filter: only accounts with balance >= this (zatoshis)")
+
+	args = reorderFlagArgs(fs, args)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "account list takes no positional args")
+	}
+
+	dataDir, err := common.resolvedDataDir()
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", err.Error())
+	}
+	st, cleanup, err := openStore(dataDir)
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "io_error", err.Error())
+	}
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var minBalancePtr *int64
+	if strings.TrimSpace(minBalanceStr) != "" {
+		u, err := strconv.ParseUint(strings.TrimSpace(minBalanceStr), 10, 64)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "min-balance-zat must be an integer")
+		}
+		if u > uint64(math.MaxInt64) {
+			return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "min-balance-zat too large")
+		}
+		v := int64(u)
+		minBalancePtr = &v
+	}
+
+	rows, err := st.ListAccounts(ctx, limit, offset, minBalancePtr)
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+	}
+
+	if common.jsonOut {
+		return writeOK(stdout, true, map[string]any{
+			"accounts":    rows,
+			"count":       len(rows),
+			"limit":       limit,
+			"offset":      offset,
+			"next_offset": offset + len(rows),
+		})
+	}
+
+	for _, r := range rows {
+		fmt.Fprintf(stdout, "%s %d\n", r.AccountID, r.BalanceZat)
+	}
+	return 0
 }

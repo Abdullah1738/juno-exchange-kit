@@ -33,6 +33,10 @@ func RunWithIO(args []string, stdout, stderr io.Writer) int {
 		return runInit(args[1:], stdout, stderr)
 	case "account":
 		return runAccount(args[1:], stdout, stderr)
+	case "wallet":
+		return runWallet(args[1:], stdout, stderr)
+	case "balances":
+		return runBalances(args[1:], stdout, stderr)
 	case "sync":
 		return runSync(args[1:], stdout, stderr)
 	case "sweep":
@@ -61,6 +65,10 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  juno-exchange-kit account deposit-address <account_id> [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit account balance <account_id> [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit account wait-deposit <account_id> [--min-balance-zat <n>] [--timeout <dur>] [--poll <dur>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit account list [--min-balance-zat <n>] [--limit <n>] [--offset <n>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit wallet balance <wallet_id> [--minconf <n>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit wallet addresses <wallet_id> [--scope external|internal|all] [--account <id>] [--limit <n>] [--offset <n>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit balances [--minconf <n>] [--sync] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sync [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep consolidate [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sweep to-cold [--data-dir <dir>] [--json]")

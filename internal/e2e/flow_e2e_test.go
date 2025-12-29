@@ -59,6 +59,16 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	}
 
 	mustRunKitOK(t, ctx, bin, env, nil, "init", "--json")
+	mustRunKitOK(t, ctx, bin, env, nil, "daemon", "start", "--poll", "200ms", "--json")
+	daemonRunning := true
+	defer func() {
+		if !daemonRunning {
+			return
+		}
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _ = runKit(t, stopCtx, bin, env, nil, "daemon", "stop", "--json")
+	}()
 
 	var accountResp struct {
 		Status string `json:"status"`
@@ -136,15 +146,26 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	_ = mustWaitOpTxID(t, ctx, stack, opid)
 	mustRunCLI(t, ctx, stack, "generate", "1")
 
-	mustRunKitOK(t, ctx, bin, env, nil, "account", "wait-deposit", accountID, "--timeout", "2m", "--poll", "200ms", "--json")
-
 	var balResp struct {
 		Status string `json:"status"`
 		Data   struct {
 			BalanceZat int64 `json:"balance_zat"`
 		} `json:"data"`
 	}
-	mustRunKitOKInto(t, ctx, bin, env, nil, &balResp, "account", "balance", "--json", accountID)
+	waitDeadline := time.Now().Add(2 * time.Minute)
+	for {
+		mustRunKitOKInto(t, ctx, bin, env, nil, &balResp, "account", "balance", "--json", accountID)
+		if balResp.Data.BalanceZat > 0 {
+			break
+		}
+		if time.Now().After(waitDeadline) {
+			t.Fatalf("timeout waiting for credited balance")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	mustRunKitOK(t, ctx, bin, env, nil, "daemon", "stop", "--json")
+	daemonRunning = false
+
 	if balResp.Data.BalanceZat <= 0 {
 		t.Fatalf("expected credited balance, got: %+v", balResp)
 	}

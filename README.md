@@ -104,7 +104,8 @@ Commands:
 - List accounts + balances: `bin/juno-exchange-kit account list`
 - Wait for deposit updates + exit on credit: `bin/juno-exchange-kit account wait-deposit <account_id> [--lookback 1h]`
 - One-shot sync (consumes scanner events): `bin/juno-exchange-kit sync`
-- Background sync loop: `bin/juno-exchange-kit daemon`
+- Background sync loop: `bin/juno-exchange-kit daemon start` (use `daemon status` / `daemon stop`)
+- Foreground sync loop: `bin/juno-exchange-kit daemon`
 - Exchange balances (assets vs liabilities): `bin/juno-exchange-kit balances`
 - Wallet balance (hot/cold): `bin/juno-exchange-kit wallet balance <hot|cold>`
 - Wallet addresses: `bin/juno-exchange-kit wallet addresses <hot|cold> --scope external|internal|all`
@@ -142,4 +143,4 @@ NEW_PENDING_DEPOSIT 1.0 JUNO conf=3 12 seconds ago
 NEW_CONFIRMED_DEPOSIT 1.0 JUNO conf=100 now
 ```
 
-Tip: on mainnet/testnet the default is `JUNO_SCAN_CONFIRMATIONS=100`, so deposits will sit in `liabilities_pending_zat` until confirmed. `balances` syncs from `juno-scan` by default; disable with `--sync=false`. For “always-on” behavior, run `bin/juno-exchange-kit daemon` in the background.
+Tip: on mainnet/testnet the default is `JUNO_SCAN_CONFIRMATIONS=100`, so deposits will sit in `liabilities_pending_zat` until confirmed. `balances` syncs from `juno-scan` by default; disable with `--sync=false`. For “always-on” behavior, use `bin/juno-exchange-kit daemon start` (logs to `<data-dir>/daemon.log` by default).

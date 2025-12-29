@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/Abdullah1738/juno-exchange-kit/internal/app"
@@ -144,5 +145,44 @@ func writeErr(stdout, stderr io.Writer, jsonOut bool, code, msg string) int {
 		msg = code
 	}
 	fmt.Fprintln(stderr, msg)
+	return 1
+}
+
+func writeErrWithDetails(stdout, stderr io.Writer, jsonOut bool, code, msg string, details map[string]any) int {
+	if jsonOut {
+		errObj := map[string]any{
+			"code":    code,
+			"message": msg,
+		}
+		for k, v := range details {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+			errObj[k] = v
+		}
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"status": "err",
+			"error":  errObj,
+		})
+		return 1
+	}
+	if msg == "" {
+		msg = code
+	}
+	if len(details) == 0 {
+		fmt.Fprintln(stderr, msg)
+		return 1
+	}
+
+	extra := make([]string, 0, len(details))
+	for k, v := range details {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		extra = append(extra, fmt.Sprintf("%s=%v", k, v))
+	}
+	sort.Strings(extra)
+	fmt.Fprintf(stderr, "%s (%s)\n", msg, strings.Join(extra, " "))
 	return 1
 }

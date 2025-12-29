@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/Abdullah1738/juno-exchange-kit/internal/keys"
 	keysffi "github.com/Abdullah1738/juno-exchange-kit/internal/keys/ffi"
+	"github.com/Abdullah1738/juno-exchange-kit/internal/store"
+	"github.com/Abdullah1738/juno-sdk-go/junocashd"
 	"github.com/Abdullah1738/juno-sdk-go/junoscan"
 )
 
@@ -164,11 +168,23 @@ func runAccountBalance(args []string, stdout, stderr io.Writer) int {
 
 	bal, err := s.AccountBalance(ctx, accountID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "account not found")
+		}
 		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
 	}
 
 	if common.jsonOut {
-		return writeOK(stdout, true, map[string]any{"account_id": accountID, "balance_zat": bal})
+		pending, err := s.PendingDepositsSummary(ctx, &accountID)
+		if err != nil {
+			return writeErr(stdout, stderr, true, "db_error", err.Error())
+		}
+		return writeOK(stdout, true, map[string]any{
+			"account_id":            accountID,
+			"balance_zat":           bal,
+			"pending_deposits_zat":  pending.AmountZat,
+			"pending_deposit_count": pending.Count,
+		})
 	}
 	fmt.Fprintln(stdout, bal)
 	return 0
@@ -181,16 +197,21 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 	var common commonFlags
 	common.bind(fs)
 
+	var rpc rpcFlags
+	rpc.bind(fs)
+
 	var services servicesFlags
 	services.bind(fs)
 
 	var timeout time.Duration
 	var poll time.Duration
 	var minBalanceStr string
+	var lookback time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Minute, "max wait time")
 	fs.DurationVar(&poll, "poll", 2*time.Second, "poll interval")
 	fs.StringVar(&minBalanceStr, "min-balance-zat", "", "wait until account balance >= this (zatoshis); default: current+1")
+	fs.DurationVar(&lookback, "lookback", 1*time.Hour, "print recent deposit updates from this lookback window")
 
 	args = reorderFlagArgs(fs, args)
 	if err := fs.Parse(args); err != nil {
@@ -206,6 +227,9 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 	}
 	if poll <= 0 {
 		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "poll must be > 0")
+	}
+	if lookback < 0 {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "lookback must be >= 0")
 	}
 
 	dataDir, err := common.resolvedDataDir()
@@ -227,11 +251,20 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", err.Error())
 	}
 
+	rpcURL, rpcUser, rpcPass, rpcErr := rpc.resolved()
+	var rpcClient *junocashd.Client
+	if rpcErr == nil {
+		rpcClient = junocashd.New(rpcURL, rpcUser, rpcPass)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	startBal, err := st.AccountBalance(ctx, accountID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "account not found")
+		}
 		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
 	}
 
@@ -249,6 +282,9 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 	if targetBal < 0 {
 		targetBal = startBal + 1
 	}
+
+	since := time.Now().Add(-lookback)
+	seen := make(map[string]string)
 
 	for {
 		bal, err := st.AccountBalance(ctx, accountID)
@@ -273,12 +309,122 @@ func runAccountWaitDeposit(args []string, stdout, stderr io.Writer) int {
 		_, _ = syncWallet(syncCtx, st, sc, "hot", io.Discard, true)
 		syncCancel()
 
+		printCtx, printCancel := context.WithTimeout(ctx, 5*time.Second)
+		tipHeight := int64(0)
+		if rpcClient != nil {
+			if info, err := rpcClient.GetBlockchainInfo(printCtx); err == nil {
+				tipHeight = info.Blocks
+			}
+		}
+		_ = printDepositUpdates(printCtx, stdout, common.jsonOut, st, accountID, since.Unix(), tipHeight, seen)
+		printCancel()
+
 		select {
 		case <-ctx.Done():
 			return writeErr(stdout, stderr, common.jsonOut, "timeout", "deposit wait timeout")
 		case <-time.After(poll):
 		}
 	}
+}
+
+func printDepositUpdates(ctx context.Context, stdout io.Writer, jsonOut bool, st *store.Store, accountID string, sinceUnix int64, tipHeight int64, seen map[string]string) error {
+	if jsonOut {
+		return nil
+	}
+	if st == nil {
+		return errors.New("nil store")
+	}
+	if seen == nil {
+		return errors.New("nil seen map")
+	}
+
+	recs, err := st.ListAccountDepositsSince(ctx, accountID, sinceUnix, 500)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+
+	for _, r := range recs {
+		key := r.WalletID + ":" + r.TxID + ":" + strconv.FormatUint(uint64(r.ActionIndex), 10)
+		prev := seen[key]
+		cur := string(r.Status)
+		if prev == cur {
+			continue
+		}
+		seen[key] = cur
+
+		amount := formatJUNO(r.AmountZat)
+		ago := humanAgo(now.Sub(r.UpdatedAt))
+		confStr := ""
+		if tipHeight > 0 && r.Height > 0 && tipHeight >= r.Height {
+			conf := tipHeight - r.Height + 1
+			if conf < 0 {
+				conf = 0
+			}
+			confStr = fmt.Sprintf(" conf=%d", conf)
+		}
+
+		switch r.Status {
+		case store.DepositStatusDetected, store.DepositStatusUnconfirmed:
+			fmt.Fprintf(stdout, "NEW_PENDING_DEPOSIT %s JUNO%s %s\n", amount, confStr, ago)
+		case store.DepositStatusConfirmed:
+			fmt.Fprintf(stdout, "NEW_CONFIRMED_DEPOSIT %s JUNO%s %s\n", amount, confStr, ago)
+		case store.DepositStatusOrphaned:
+			fmt.Fprintf(stdout, "DEPOSIT_ORPHANED %s JUNO%s %s\n", amount, confStr, ago)
+		default:
+			// ignore
+		}
+	}
+	return nil
+}
+
+func formatJUNO(amountZat int64) string {
+	neg := amountZat < 0
+	if neg {
+		amountZat = -amountZat
+	}
+
+	const unit = int64(100_000_000)
+	whole := amountZat / unit
+	frac := amountZat % unit
+	s := fmt.Sprintf("%d.%08d", whole, frac)
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	if s == "" {
+		s = "0"
+	}
+	if neg {
+		return "-" + s
+	}
+	return s
+}
+
+func humanAgo(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Second {
+		return "now"
+	}
+	if d < time.Minute {
+		sec := int(d.Seconds())
+		if sec == 1 {
+			return "1 second ago"
+		}
+		return fmt.Sprintf("%d seconds ago", sec)
+	}
+	if d < time.Hour {
+		min := int(d.Minutes())
+		if min == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", min)
+	}
+	hr := int(d.Hours())
+	if hr == 1 {
+		return "1 hour ago"
+	}
+	return fmt.Sprintf("%d hours ago", hr)
 }
 
 func runAccountList(args []string, stdout, stderr io.Writer) int {

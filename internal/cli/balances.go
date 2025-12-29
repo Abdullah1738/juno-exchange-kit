@@ -27,7 +27,7 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 	var minconf int64
 	var doSync bool
 	fs.Int64Var(&minconf, "minconf", 1, "minimum confirmations for spendable (0 = include unconfirmed)")
-	fs.BoolVar(&doSync, "sync", false, "sync from juno-scan before reporting")
+	fs.BoolVar(&doSync, "sync", true, "sync from juno-scan before reporting")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -70,6 +70,10 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
 	}
+	pending, err := st.PendingDepositsSummary(ctx, nil)
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+	}
 
 	var tipHeight int64
 	if minconf > 0 {
@@ -94,7 +98,8 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 	}
 
 	assets := hot.TotalUnspentZat + cold.TotalUnspentZat
-	equity := assets - liabilities
+	equityConfirmed := assets - liabilities
+	equityTotal := assets - (liabilities + pending.AmountZat)
 
 	hotDepositCount, err := st.CountDepositAddresses(ctx, "hot", nil)
 	if err != nil {
@@ -102,15 +107,18 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if common.jsonOut {
-		return writeOK(stdout, true, map[string]any{
-			"minconf":        minconf,
-			"tip_height":     tipHeight,
-			"assets_zat":     assets,
-			"liabilities_zat": liabilities,
-			"equity_zat":     equity,
-			"wallets": map[string]any{
-				"hot": map[string]any{
-					"total_unspent_zat": hot.TotalUnspentZat,
+			return writeOK(stdout, true, map[string]any{
+				"minconf":        minconf,
+				"tip_height":     tipHeight,
+				"assets_zat":     assets,
+				"liabilities_zat":         liabilities,
+				"liabilities_pending_zat": pending.AmountZat,
+				"liabilities_total_zat":   liabilities + pending.AmountZat,
+				"equity_zat":              equityConfirmed,
+				"equity_total_zat":        equityTotal,
+				"wallets": map[string]any{
+					"hot": map[string]any{
+						"total_unspent_zat": hot.TotalUnspentZat,
 					"spendable_zat":     hot.SpendableZat,
 					"unspent_notes":     hot.UnspentNotes,
 					"spendable_notes":   hot.SpendableNotes,
@@ -122,13 +130,13 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 					"unspent_notes":     cold.UnspentNotes,
 					"spendable_notes":   cold.SpendableNotes,
 				},
-			},
-			"synced":         doSync,
-			"computed_at_utc": time.Now().UTC().Format(time.RFC3339),
-		})
-	}
+				},
+				"synced":         doSync,
+				"computed_at_utc": time.Now().UTC().Format(time.RFC3339),
+			})
+		}
 
-	fmt.Fprintf(stdout, "assets_zat=%d liabilities_zat=%d equity_zat=%d\n", assets, liabilities, equity)
+	fmt.Fprintf(stdout, "assets_zat=%d liabilities_zat=%d liabilities_pending_zat=%d equity_zat=%d equity_total_zat=%d\n", assets, liabilities, pending.AmountZat, equityConfirmed, equityTotal)
 	fmt.Fprintf(stdout, "hot total_unspent_zat=%d spendable_zat=%d unspent_notes=%d spendable_notes=%d deposit_addresses=%d\n", hot.TotalUnspentZat, hot.SpendableZat, hot.UnspentNotes, hot.SpendableNotes, hotDepositCount)
 	fmt.Fprintf(stdout, "cold total_unspent_zat=%d spendable_zat=%d unspent_notes=%d spendable_notes=%d\n", cold.TotalUnspentZat, cold.SpendableZat, cold.UnspentNotes, cold.SpendableNotes)
 	return 0

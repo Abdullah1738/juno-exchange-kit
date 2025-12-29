@@ -175,6 +175,88 @@ func PlanSweep(ctx context.Context, cfg SendConfig, toAddress string, memoHex st
 	return plan, fee, nil
 }
 
+func PlanSweepMany(ctx context.Context, cfg SendConfig, toAddress string, memoHex string, changeAddress string, maxSpends int) ([]types.TxPlan, []uint64, error) {
+	if cfg.RPC == nil || cfg.Scan == nil {
+		return nil, nil, types.CodedError{Code: types.ErrCodeInvalidRequest, Message: "rpc/scan required"}
+	}
+	cfg.Wallet = strings.TrimSpace(cfg.Wallet)
+	toAddress = strings.TrimSpace(toAddress)
+	memoHex = strings.TrimSpace(memoHex)
+	changeAddress = strings.TrimSpace(changeAddress)
+	if cfg.Wallet == "" {
+		return nil, nil, types.CodedError{Code: types.ErrCodeInvalidRequest, Message: "wallet required"}
+	}
+	if toAddress == "" {
+		return nil, nil, types.CodedError{Code: types.ErrCodeInvalidRequest, Message: "to_address required"}
+	}
+	if changeAddress == "" {
+		changeAddress = toAddress
+	}
+	if cfg.MinConfirmations <= 0 {
+		cfg.MinConfirmations = 1
+	}
+	if cfg.ExpiryOffset == 0 {
+		cfg.ExpiryOffset = 40
+	}
+
+	// Matches the current tx signing constraints.
+	const maxNotesPerTx = 200
+	if maxSpends <= 0 || maxSpends > maxNotesPerTx {
+		maxSpends = maxNotesPerTx
+	}
+	if maxSpends < 2 {
+		maxSpends = 2
+	}
+
+	chainInfo, err := chain.GetInfo(ctx, cfg.RPC)
+	if err != nil {
+		return nil, nil, err
+	}
+	coinType := cfg.CoinType
+	if coinType == 0 {
+		switch strings.ToLower(strings.TrimSpace(chainInfo.Chain)) {
+		case "main":
+			coinType = 8133
+		case "test":
+			coinType = 8134
+		case "regtest":
+			coinType = 8135
+		default:
+			return nil, nil, types.CodedError{Code: types.ErrCodeInvalidRequest, Message: "unknown chain"}
+		}
+	}
+	if chainInfo.Height < 0 || chainInfo.Height > int64(^uint32(0)) {
+		return nil, nil, errors.New("txplan: invalid chain height")
+	}
+	expiryHeight := uint32(chainInfo.Height) + cfg.ExpiryOffset
+	if expiryHeight < uint32(chainInfo.Height) {
+		return nil, nil, errors.New("txplan: expiry height overflow")
+	}
+
+	notes, err := listSpendableNotes(ctx, cfg.Scan, cfg.Wallet, chainInfo.Height, cfg.MinConfirmations)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(notes) == 0 {
+		return nil, nil, types.CodedError{Code: types.ErrCodeNoLiquidityInHot, Message: "no spendable notes"}
+	}
+
+	chunks := splitNotesBalanced(notes, maxSpends)
+
+	blockCache := make(map[int64]blockV2)
+	plans := make([]types.TxPlan, 0, len(chunks))
+	fees := make([]uint64, 0, len(chunks))
+	for _, chunk := range chunks {
+		plan, fee, err := planSweepWithNotes(ctx, cfg, chainInfo, coinType, expiryHeight, chunk, toAddress, memoHex, changeAddress, blockCache)
+		if err != nil {
+			return nil, nil, err
+		}
+		plans = append(plans, plan)
+		fees = append(fees, fee)
+	}
+	return plans, fees, nil
+}
+
 func planSend(ctx context.Context, cfg SendConfig, kind types.TxPlanKind, outputs []Output, changeAddress string) (types.TxPlan, uint64, error) {
 	if cfg.RPC == nil || cfg.Scan == nil {
 		return types.TxPlan{}, 0, types.CodedError{Code: types.ErrCodeInvalidRequest, Message: "rpc/scan required"}

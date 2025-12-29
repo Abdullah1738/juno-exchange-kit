@@ -102,8 +102,12 @@ func syncWallet(ctx context.Context, st *store.Store, sc *junoscan.Client, walle
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return syncResult{}, errorsNew("invalid deposit payload")
 				}
-				if _, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusDetected, nil); err != nil {
+				res, err := st.ApplyDeposit(ctx, walletID, p.TxID, p.ActionIndex, p.DiversifierIndex, amountI64(p.AmountZatoshis), p.Height, store.DepositStatusDetected, nil)
+				if err != nil {
 					return syncResult{}, err
+				}
+				if !jsonOut && strings.TrimSpace(res.AccountID) != "" {
+					fmt.Fprintf(stdout, "pending %s %s JUNO (txid=%s)\n", res.AccountID, formatJUNO(amountI64(p.AmountZatoshis)), strings.ToLower(strings.TrimSpace(p.TxID)))
 				}
 			case types.WalletEventKindDepositConfirmed:
 				var p types.DepositConfirmedPayload

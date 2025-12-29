@@ -35,6 +35,14 @@ func RunWithIO(args []string, stdout, stderr io.Writer) int {
 		return runAccount(args[1:], stdout, stderr)
 	case "sync":
 		return runSync(args[1:], stdout, stderr)
+	case "sweep":
+		return runSweep(args[1:], stdout, stderr)
+	case "withdraw":
+		return runWithdraw(args[1:], stdout, stderr)
+	case "withdrawals":
+		return runWithdrawals(args[1:], stdout, stderr)
+	case "cold-to-hot":
+		return runColdToHot(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		writeUsage(stderr)
@@ -52,11 +60,19 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  juno-exchange-kit account create [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit account deposit-address <account_id> [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "  juno-exchange-kit sync [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit sweep consolidate [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit sweep to-cold [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit withdraw --account <id> --to <j...> --amount-zat <n> [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit withdrawals list [--account <id>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit cold-to-hot plan --amount-zat <n> [--out <path>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit cold-to-hot sign --txplan <path|-> [--out <path>] [--data-dir <dir>] [--json]")
+	fmt.Fprintln(w, "  juno-exchange-kit cold-to-hot broadcast --raw-tx-hex <hex> [--wait-confirmations <n>] [--data-dir <dir>] [--json]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Env:")
 	fmt.Fprintln(w, "  JUNO_EXCHANGE_KIT_DATA_DIR")
 	fmt.Fprintln(w, "  JUNO_RPC_URL, JUNO_RPC_USER, JUNO_RPC_PASS")
 	fmt.Fprintln(w, "  JUNO_SCAN_URL, JUNO_BROADCAST_URL")
+	fmt.Fprintln(w, "  JUNO_TXSIGN_BIN")
 }
 
 type commonFlags struct {
@@ -120,4 +136,3 @@ func writeErr(stdout, stderr io.Writer, jsonOut bool, code, msg string) int {
 	fmt.Fprintln(stderr, msg)
 	return 1
 }
-

@@ -99,10 +99,12 @@ Commands:
 - Init wallets + state: `bin/juno-exchange-kit init`
 - Create account: `bin/juno-exchange-kit account create`
 - Get deposit address: `bin/juno-exchange-kit account deposit-address <account_id>`
-- Balance: `bin/juno-exchange-kit account balance <account_id>`
+- Balance (confirmed credits only): `bin/juno-exchange-kit account balance <account_id>`
+- Balance (includes pending deposits): `bin/juno-exchange-kit account balance <account_id> --json`
 - List accounts + balances: `bin/juno-exchange-kit account list`
-- Wait for confirmed deposit credit: `bin/juno-exchange-kit account wait-deposit <account_id>`
-- Sync/credit confirmed deposits: `bin/juno-exchange-kit sync`
+- Wait for deposit updates + exit on credit: `bin/juno-exchange-kit account wait-deposit <account_id> [--lookback 1h]`
+- One-shot sync (consumes scanner events): `bin/juno-exchange-kit sync`
+- Background sync loop: `bin/juno-exchange-kit daemon`
 - Exchange balances (assets vs liabilities): `bin/juno-exchange-kit balances`
 - Wallet balance (hot/cold): `bin/juno-exchange-kit wallet balance <hot|cold>`
 - Wallet addresses: `bin/juno-exchange-kit wallet addresses <hot|cold> --scope external|internal|all`
@@ -111,3 +113,33 @@ Commands:
 - Withdraw: `bin/juno-exchange-kit withdraw --account <id> --to <j...> --amount-zat <n>`
 - Cold → hot (offline flow): `bin/juno-exchange-kit cold-to-hot plan|sign|broadcast`
 - History: `bin/juno-exchange-kit withdrawals list`
+
+## Deposits: pending vs confirmed
+
+Because Juno Cash is shielded-by-default, deposits are detected by trial-decrypt scanning (UFVK) and then confirmed after N blocks.
+
+Flow:
+
+1. `juno-scan` emits `DepositEvent` when a deposit is detected (pending).
+2. After `JUNO_SCAN_CONFIRMATIONS` blocks, `juno-scan` emits `DepositConfirmed`.
+3. `juno-exchange-kit sync` / `daemon` consumes those events:
+   - pending deposits are recorded immediately
+   - account credits (liabilities) only increase on `DepositConfirmed`
+
+Visibility:
+
+- `bin/juno-exchange-kit balances` shows:
+  - `liabilities_zat` (confirmed user balances)
+  - `liabilities_pending_zat` (detected but not yet credited)
+  - `equity_zat` (assets - confirmed liabilities)
+  - `equity_total_zat` (assets - (confirmed + pending))
+- `bin/juno-exchange-kit account wait-deposit <account_id>` prints `NEW_PENDING_DEPOSIT` / `NEW_CONFIRMED_DEPOSIT` lines (with a lookback window) and exits once the account is credited.
+
+Example:
+
+```
+NEW_PENDING_DEPOSIT 1.0 JUNO conf=3 12 seconds ago
+NEW_CONFIRMED_DEPOSIT 1.0 JUNO conf=100 now
+```
+
+Tip: on mainnet/testnet the default is `JUNO_SCAN_CONFIRMATIONS=100`, so deposits will sit in `liabilities_pending_zat` until confirmed. `balances` syncs from `juno-scan` by default; disable with `--sync=false`. For “always-on” behavior, run `bin/juno-exchange-kit daemon` in the background.

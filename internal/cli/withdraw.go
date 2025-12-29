@@ -211,11 +211,7 @@ func runWithdraw(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "sign_failed", "invalid fee returned by signer")
 	}
 
-	var waitPtr *int64
-	if waitConf > 0 {
-		waitPtr = &waitConf
-	}
-	sub, err := bc.Submit(ctx, signed.RawTxHex, waitPtr)
+	sub, err := bc.Submit(ctx, signed.RawTxHex, nil)
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
 	}
@@ -223,6 +219,12 @@ func runWithdraw(args []string, stdout, stderr io.Writer) int {
 	if _, err := st.CreateWithdrawalAndDebit(ctx, accountID, "hot", to, int64(amountU64), feeI64, sub.TxID); err != nil {
 		// At this point the tx is already broadcast; surface a clear error.
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInvalidRequest), err.Error())
+	}
+
+	if waitConf > 0 {
+		if _, err := bc.WaitForConfirmations(ctx, sub.TxID, waitConf); err != nil {
+			return writeErrWithDetails(stdout, stderr, common.jsonOut, "confirm_wait_failed", err.Error(), map[string]any{"txid": sub.TxID})
+		}
 	}
 
 	if common.jsonOut {

@@ -364,16 +364,18 @@ func runColdToHotBroadcast(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInvalidRequest), err.Error())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
 	defer cancel()
 
-	var waitPtr *int64
-	if waitConf > 0 {
-		waitPtr = &waitConf
-	}
-	sub, err := bc.Submit(ctx, raw, waitPtr)
+	sub, err := bc.Submit(ctx, raw, nil)
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+	}
+
+	if waitConf > 0 {
+		if _, err := bc.WaitForConfirmations(ctx, sub.TxID, waitConf); err != nil {
+			return writeErrWithDetails(stdout, stderr, common.jsonOut, "confirm_wait_failed", err.Error(), map[string]any{"txid": sub.TxID})
+		}
 	}
 
 	if common.jsonOut {

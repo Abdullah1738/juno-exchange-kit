@@ -22,6 +22,148 @@ type DepositApplyResult struct {
 	DeltaZat  int64
 }
 
+type DepositsSummary struct {
+	Count     int64
+	AmountZat int64
+}
+
+func (s *Store) PendingDepositsSummary(ctx context.Context, accountID *string) (DepositsSummary, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return DepositsSummary{}, err
+	}
+
+	q := `
+		SELECT COUNT(1), COALESCE(SUM(amount_zat), 0)
+		FROM deposits
+		WHERE account_id IS NOT NULL
+		  AND status IN ('detected','unconfirmed')
+	`
+	args := []any{}
+	if accountID != nil {
+		v := strings.TrimSpace(*accountID)
+		if v == "" {
+			return DepositsSummary{}, errors.New("store: account_id required")
+		}
+		q += ` AND account_id=?`
+		args = append(args, v)
+	}
+
+	var count int64
+	var sum int64
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&count, &sum); err != nil {
+		return DepositsSummary{}, err
+	}
+	if count < 0 || sum < 0 {
+		return DepositsSummary{}, errors.New("store: invalid pending deposits summary")
+	}
+	return DepositsSummary{Count: count, AmountZat: sum}, nil
+}
+
+type DepositRecord struct {
+	WalletID         string
+	TxID             string
+	ActionIndex      uint32
+	DiversifierIndex uint32
+	AccountID        *string
+	AmountZat        int64
+	Height           int64
+	Status           DepositStatus
+	ConfirmedHeight  *int64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+func (s *Store) ListAccountDepositsSince(ctx context.Context, accountID string, sinceUnix int64, limit int) ([]DepositRecord, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return nil, err
+	}
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, errors.New("store: account_id required")
+	}
+	if sinceUnix < 0 {
+		sinceUnix = 0
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT wallet_id, txid, action_index, diversifier_index, account_id, amount_zat, height, status, confirmed_height, created_at, updated_at
+		FROM deposits
+		WHERE account_id=?
+		  AND updated_at >= ?
+		ORDER BY updated_at ASC, wallet_id ASC, txid ASC, action_index ASC
+		LIMIT ?
+	`, accountID, sinceUnix, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]DepositRecord, 0, min(limit, 1000))
+	for rows.Next() {
+		var r DepositRecord
+		var actionIdx int64
+		var divIdx int64
+		var acct sql.NullString
+		var confirmed sql.NullInt64
+		var created int64
+		var updated int64
+		var status string
+		if err := rows.Scan(&r.WalletID, &r.TxID, &actionIdx, &divIdx, &acct, &r.AmountZat, &r.Height, &status, &confirmed, &created, &updated); err != nil {
+			return nil, err
+		}
+		r.WalletID = strings.TrimSpace(r.WalletID)
+		r.TxID = strings.ToLower(strings.TrimSpace(r.TxID))
+		if r.WalletID == "" || r.TxID == "" {
+			return nil, errors.New("store: invalid deposit row")
+		}
+		if actionIdx < 0 || actionIdx > int64(^uint32(0)) {
+			return nil, errors.New("store: invalid action_index")
+		}
+		if divIdx < 0 || divIdx > int64(^uint32(0)) {
+			return nil, errors.New("store: invalid diversifier_index")
+		}
+		r.ActionIndex = uint32(actionIdx)
+		r.DiversifierIndex = uint32(divIdx)
+		if acct.Valid && strings.TrimSpace(acct.String) != "" {
+			v := strings.TrimSpace(acct.String)
+			r.AccountID = &v
+		}
+		r.Status = DepositStatus(strings.TrimSpace(status))
+		switch r.Status {
+		case DepositStatusDetected, DepositStatusConfirmed, DepositStatusUnconfirmed, DepositStatusOrphaned:
+		default:
+			return nil, errors.New("store: invalid deposit status")
+		}
+		if confirmed.Valid {
+			ch := confirmed.Int64
+			r.ConfirmedHeight = &ch
+		}
+		if created < 0 || updated < 0 {
+			return nil, errors.New("store: invalid timestamp")
+		}
+		r.CreatedAt = time.Unix(created, 0).UTC()
+		r.UpdatedAt = time.Unix(updated, 0).UTC()
+
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) AccountForDiversifierIndex(ctx context.Context, walletID string, diversifierIndex uint32) (string, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()

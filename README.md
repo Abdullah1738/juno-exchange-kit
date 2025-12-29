@@ -22,8 +22,6 @@ It is intended to demonstrate and validate the full flow end-to-end:
 
 Bring up `junocashd` + `juno-scan` + `juno-broadcast`:
 
-- `make up`
-
 Networks:
 
 - Regtest (default): `make up` or `make up-regtest`
@@ -36,7 +34,7 @@ Tear down (also removes volumes):
 
 Defaults:
 
-- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-18232}` (user/pass: `rpcuser` / `rpcpass`)
+- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-28232}` (user/pass: `rpcuser` / `rpcpass`)
 - `juno-scan` API: `http://127.0.0.1:${JUNO_SCAN_PORT_HOST:-18080}`
 - `juno-broadcast` API: `http://127.0.0.1:${JUNO_BROADCAST_PORT_HOST:-18081}`
 
@@ -70,7 +68,7 @@ Build:
 Set env vars to point at the Docker stack:
 
 ```sh
-export JUNO_RPC_URL="http://127.0.0.1:18232"
+export JUNO_RPC_URL="http://127.0.0.1:28232"
 export JUNO_RPC_USER="rpcuser"
 export JUNO_RPC_PASS="rpcpass"
 

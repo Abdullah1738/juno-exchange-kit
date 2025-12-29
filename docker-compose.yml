@@ -26,7 +26,7 @@ services:
       - -rpcuser=rpcuser
       - -rpcpassword=rpcpass
     ports:
-      - "${JUNO_RPC_PORT_HOST:-18232}:8232"
+      - "${JUNO_RPC_PORT_HOST:-28232}:8232"
     volumes:
       - junocashd-data:/data
     healthcheck:

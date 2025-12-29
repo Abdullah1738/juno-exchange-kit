@@ -2,7 +2,13 @@
 /AGENTS.md
 /tmp/
 /tmp-*/
+/bin/
+/.cache/
+/.junocashd-regtest/
+*.sqlite
+
+# Rust
+/rust/**/target/
 
 # OS
 .DS_Store
-

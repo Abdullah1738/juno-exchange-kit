@@ -63,14 +63,17 @@ func (s *Store) Init(ctx context.Context) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS accounts (
-			account_id TEXT PRIMARY KEY,
-			created_at INTEGER NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS wallet_state (
+		`CREATE TABLE IF NOT EXISTS wallets (
 			wallet_id TEXT PRIMARY KEY,
+			ufvk TEXT NOT NULL,
+			seed_path TEXT NOT NULL,
 			next_external_index INTEGER NOT NULL,
 			next_internal_index INTEGER NOT NULL,
+			created_at INTEGER NOT NULL,
+			disabled_at INTEGER
+		)`,
+		`CREATE TABLE IF NOT EXISTS accounts (
+			account_id TEXT PRIMARY KEY,
 			created_at INTEGER NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS deposit_addresses (
@@ -174,11 +177,137 @@ func (s *Store) CreateAccount(ctx context.Context) (string, error) {
 	return accountID, nil
 }
 
+func (s *Store) UpsertWallet(ctx context.Context, walletID string, ufvk string, seedPath string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return err
+	}
+	walletID = strings.TrimSpace(walletID)
+	ufvk = strings.TrimSpace(ufvk)
+	seedPath = strings.TrimSpace(seedPath)
+	if walletID == "" || ufvk == "" || seedPath == "" {
+		return errors.New("store: wallet_id, ufvk, seed_path required")
+	}
+
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO wallets(wallet_id, ufvk, seed_path, next_external_index, next_internal_index, created_at)
+		VALUES(?,?,?,?,?,?)
+		ON CONFLICT(wallet_id) DO UPDATE SET
+			ufvk=excluded.ufvk,
+			seed_path=excluded.seed_path
+	`, walletID, ufvk, seedPath, 0, 0, now)
+	return err
+}
+
+type Wallet struct {
+	WalletID           string
+	UFVK               string
+	SeedPath           string
+	NextExternalIndex  uint32
+	NextInternalIndex  uint32
+	CreatedAt          time.Time
+	DisabledAtUnixSecs *int64
+}
+
+func (s *Store) Wallet(ctx context.Context, walletID string) (Wallet, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return Wallet{}, false, err
+	}
+	walletID = strings.TrimSpace(walletID)
+	if walletID == "" {
+		return Wallet{}, false, errors.New("store: wallet_id required")
+	}
+
+	var w Wallet
+	var nextExt int64
+	var nextInt int64
+	var created int64
+	var disabled sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT wallet_id, ufvk, seed_path, next_external_index, next_internal_index, created_at, disabled_at
+		FROM wallets
+		WHERE wallet_id=?
+	`, walletID).Scan(&w.WalletID, &w.UFVK, &w.SeedPath, &nextExt, &nextInt, &created, &disabled)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Wallet{}, false, nil
+		}
+		return Wallet{}, false, err
+	}
+	if nextExt < 0 || nextExt > int64(^uint32(0)) || nextInt < 0 || nextInt > int64(^uint32(0)) {
+		return Wallet{}, false, errors.New("store: invalid wallet index")
+	}
+	w.NextExternalIndex = uint32(nextExt)
+	w.NextInternalIndex = uint32(nextInt)
+	w.CreatedAt = time.Unix(created, 0)
+	if disabled.Valid {
+		v := disabled.Int64
+		w.DisabledAtUnixSecs = &v
+	}
+	return w, true, nil
+}
+
+func (s *Store) EnsureScanCursor(ctx context.Context, walletID string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return err
+	}
+	walletID = strings.TrimSpace(walletID)
+	if walletID == "" {
+		return errors.New("store: wallet_id required")
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO scan_cursors(wallet_id, cursor) VALUES(?,0) ON CONFLICT(wallet_id) DO NOTHING`, walletID)
+	return err
+}
+
+func (s *Store) SetMeta(ctx context.Context, key, value string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return err
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errors.New("store: meta key required")
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+	return err
+}
+
+func (s *Store) Meta(ctx context.Context, key string) (string, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return "", false, err
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false, errors.New("store: meta key required")
+	}
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, key).Scan(&v)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return v, true, nil
+}
+
 // GetOrAssignDepositAddress allocates a deterministic external deposit address
-// for the given account under the "hot" wallet, if it doesn't already exist.
-//
-// Note: address derivation is wired in later steps; for now this stores a placeholder.
-func (s *Store) GetOrAssignDepositAddress(ctx context.Context, accountID string) (string, error) {
+// for the given account under the given wallet, if it doesn't already exist.
+func (s *Store) GetOrAssignDepositAddress(ctx context.Context, accountID string, walletID string, derive func(index uint32) (string, error)) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -189,8 +318,13 @@ func (s *Store) GetOrAssignDepositAddress(ctx context.Context, accountID string)
 	if accountID == "" {
 		return "", errors.New("store: account_id required")
 	}
-
-	const walletID = "hot"
+	if derive == nil {
+		return "", errors.New("store: derive func is nil")
+	}
+	walletID = strings.TrimSpace(walletID)
+	if walletID == "" {
+		return "", errors.New("store: wallet_id required")
+	}
 	const scope = "external"
 
 	var existing string
@@ -219,22 +353,29 @@ func (s *Store) GetOrAssignDepositAddress(ctx context.Context, accountID string)
 	}
 
 	var nextIdx int64
-	err = tx.QueryRowContext(ctx, `SELECT next_external_index FROM wallet_state WHERE wallet_id=?`, walletID).Scan(&nextIdx)
-	if errors.Is(err, sql.ErrNoRows) {
-		// Initialize wallet state lazily.
-		if _, err := tx.ExecContext(ctx, `INSERT INTO wallet_state(wallet_id, next_external_index, next_internal_index, created_at) VALUES(?,?,?,?)`, walletID, 0, 0, now); err != nil {
-			return "", err
+	if err := tx.QueryRowContext(ctx, `SELECT next_external_index FROM wallets WHERE wallet_id=?`, walletID).Scan(&nextIdx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errors.New("store: wallet not initialized")
 		}
-		nextIdx = 0
-	} else if err != nil {
 		return "", err
 	}
+	if nextIdx < 0 || nextIdx > int64(^uint32(0)) {
+		return "", errors.New("store: invalid wallet index")
+	}
 
-	addr := fmt.Sprintf("ADDR_NOT_IMPLEMENTED_%d", nextIdx)
+	addr, err := derive(uint32(nextIdx))
+	if err != nil {
+		return "", err
+	}
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", errors.New("store: derived address empty")
+	}
+
 	if _, err := tx.ExecContext(ctx, `INSERT INTO deposit_addresses(account_id, wallet_id, scope, address_index, address, created_at) VALUES(?,?,?,?,?,?)`, accountID, walletID, scope, nextIdx, addr, now); err != nil {
 		return "", err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE wallet_state SET next_external_index=? WHERE wallet_id=?`, nextIdx+1, walletID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE wallets SET next_external_index=? WHERE wallet_id=?`, nextIdx+1, walletID); err != nil {
 		return "", err
 	}
 

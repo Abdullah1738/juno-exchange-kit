@@ -5,7 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
+
+	"github.com/Abdullah1738/juno-exchange-kit/internal/keys"
+	keysffi "github.com/Abdullah1738/juno-exchange-kit/internal/keys/ffi"
 )
 
 func runAccount(args []string, stdout, stderr io.Writer) int {
@@ -89,7 +93,26 @@ func runAccountDepositAddress(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	addr, err := s.GetOrAssignDepositAddress(ctx, accountID)
+	uaHRP, ok, err := s.Meta(ctx, "ua_hrp")
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+	}
+	if !ok || strings.TrimSpace(uaHRP) == "" {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "not initialized (run `init`)")
+	}
+
+	w, ok, err := s.Wallet(ctx, "hot")
+	if err != nil {
+		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+	}
+	if !ok {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "hot wallet missing (run `init`)")
+	}
+
+	deriver := keysffi.New()
+	addr, err := s.GetOrAssignDepositAddress(ctx, accountID, "hot", func(index uint32) (string, error) {
+		return deriver.AddressFromUFVK(w.UFVK, uaHRP, keys.ScopeExternal, index)
+	})
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
 	}
@@ -99,4 +122,3 @@ func runAccountDepositAddress(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, addr)
 	return 0
 }
-

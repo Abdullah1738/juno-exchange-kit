@@ -335,12 +335,27 @@ func runAccountList(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if common.jsonOut {
+		type row struct {
+			AccountID  string    `json:"account_id"`
+			BalanceZat int64     `json:"balance_zat"`
+			CreatedAt  time.Time `json:"created_at"`
+			UpdatedAt  time.Time `json:"updated_at"`
+		}
+		out := make([]row, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, row{
+				AccountID:  r.AccountID,
+				BalanceZat: r.BalanceZat,
+				CreatedAt:  r.CreatedAt,
+				UpdatedAt:  r.UpdatedAt,
+			})
+		}
 		return writeOK(stdout, true, map[string]any{
-			"accounts":    rows,
-			"count":       len(rows),
+			"accounts":    out,
+			"count":       len(out),
 			"limit":       limit,
 			"offset":      offset,
-			"next_offset": offset + len(rows),
+			"next_offset": offset + len(out),
 		})
 	}
 

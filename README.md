@@ -15,6 +15,8 @@ It is intended to demonstrate and validate the full flow end-to-end:
 ## Prerequisites
 
 - `junocashd` running locally with RPC enabled (regtest recommended for demos/tests).
+- `juno-broadcast` running locally (required for submits/confirmations).
+- `juno-scan` running locally (required for deposits, note/accounting, and witnesses).
 
 ## Run `junocashd` (example: regtest)
 

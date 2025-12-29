@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,34 +58,93 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "io_error", err.Error())
 	}
 
+	initialized := false
 	if v, ok, err := s.Meta(ctx, "initialized"); err == nil && ok && strings.TrimSpace(v) == "1" {
-		return writeOK(stdout, common.jsonOut, map[string]any{"data_dir": dataDir, "initialized": true})
+		initialized = true
 	}
 
-	rpcURL, rpcUser, rpcPass, err := rpc.resolved()
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", err.Error())
+	rpcURL, rpcUser, rpcPass, rpcErr := rpc.resolved()
+	if rpcErr != nil && !initialized {
+		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", rpcErr.Error())
 	}
 
-	rpcClient := junocashd.New(rpcURL, rpcUser, rpcPass)
-	info, err := rpcClient.GetBlockchainInfo(ctx)
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "node_rpc_error", err.Error())
-	}
-
-	uaHRP := strings.TrimSpace(uaHRPOverride)
-	if uaHRP == "" {
-		var ok bool
-		uaHRP, ok = uaHRPFromChain(info.Chain)
-		if !ok {
-			return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "unknown chain; set --ua-hrp")
+	infoChain := ""
+	uaHRPExpected := ""
+	coinTypeExpected := uint32(0)
+	if rpcErr == nil {
+		rpcClient := junocashd.New(rpcURL, rpcUser, rpcPass)
+		info, err := rpcClient.GetBlockchainInfo(ctx)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "node_rpc_error", err.Error())
 		}
+		infoChain = strings.ToLower(strings.TrimSpace(info.Chain))
+
+		uaHRPExpected = strings.TrimSpace(uaHRPOverride)
+		if uaHRPExpected == "" {
+			var ok bool
+			uaHRPExpected, ok = uaHRPFromChain(info.Chain)
+			if !ok {
+				return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "unknown chain; set --ua-hrp")
+			}
+		}
+
+		coinTypeExpected, _ = coinTypeFromChain(info.Chain)
 	}
 
-	coinType, ok := coinTypeFromChain(info.Chain)
-	if !ok {
+	if initialized {
+		storedHRP, _, err := s.Meta(ctx, "ua_hrp")
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+		}
+		storedCoinTypeStr, _, err := s.Meta(ctx, "coin_type")
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
+		}
+		storedCoinType := uint32(0)
+		if strings.TrimSpace(storedCoinTypeStr) != "" {
+			if v, err := strconv.ParseUint(strings.TrimSpace(storedCoinTypeStr), 10, 32); err == nil {
+				storedCoinType = uint32(v)
+			}
+		}
+
+		if rpcErr == nil {
+			storedHRPTrim := strings.TrimSpace(storedHRP)
+			if strings.TrimSpace(uaHRPExpected) != "" && storedHRPTrim != "" && !strings.EqualFold(storedHRPTrim, uaHRPExpected) {
+				return writeErr(stdout, stderr, common.jsonOut, "invalid_request", fmt.Sprintf(
+					"data dir already initialized for ua_hrp=%s; current rpc chain=%s expects ua_hrp=%s (use a different --data-dir or JUNO_EXCHANGE_KIT_DATA_DIR)",
+					storedHRPTrim,
+					infoChain,
+					uaHRPExpected,
+				))
+			}
+			if coinTypeExpected != 0 && storedCoinType != 0 && storedCoinType != coinTypeExpected {
+				return writeErr(stdout, stderr, common.jsonOut, "invalid_request", fmt.Sprintf(
+					"data dir already initialized for coin_type=%d; current rpc chain=%s expects coin_type=%d (use a different --data-dir or JUNO_EXCHANGE_KIT_DATA_DIR)",
+					storedCoinType,
+					infoChain,
+					coinTypeExpected,
+				))
+			}
+			_ = s.SetMeta(ctx, "chain", infoChain)
+		}
+
+		out := map[string]any{
+			"data_dir":     dataDir,
+			"initialized":  true,
+			"chain":        strings.TrimSpace(infoChain),
+			"ua_hrp":       strings.TrimSpace(storedHRP),
+			"coin_type":    storedCoinType,
+			"rpc_required": false,
+		}
+		return writeOK(stdout, common.jsonOut, out)
+	}
+
+	if coinTypeExpected == 0 {
 		return writeErr(stdout, stderr, common.jsonOut, "invalid_request", "unknown chain; set --ua-hrp and configure coin type")
 	}
+
+	uaHRP := uaHRPExpected
+	coinType := coinTypeExpected
 
 	seedDir := filepath.Join(dataDir, "keys")
 	if err := os.MkdirAll(seedDir, 0o755); err != nil {
@@ -132,6 +192,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	_ = s.SetMeta(ctx, "ua_hrp", uaHRP)
 	_ = s.SetMeta(ctx, "coin_type", fmt.Sprint(coinType))
 	_ = s.SetMeta(ctx, "account", "0")
+	_ = s.SetMeta(ctx, "chain", infoChain)
 	_ = s.SetMeta(ctx, "initialized", "1")
 
 	if scanURL := services.resolvedScanURL(); scanURL != "" {

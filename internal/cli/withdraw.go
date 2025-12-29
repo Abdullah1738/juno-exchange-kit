@@ -115,7 +115,16 @@ func runWithdraw(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "db_error", err.Error())
 	}
 	if accountBal < int64(amountU64) {
-		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInsufficientBalance), "INSUFFICIENT_BALANCE")
+		return writeErrWithDetails(stdout, stderr, common.jsonOut, string(types.ErrCodeInsufficientBalance), "INSUFFICIENT_BALANCE", map[string]any{
+			"account_id":          accountID,
+			"account_balance_zat": accountBal,
+			"requested_amount_zat": func() int64 {
+				if amountU64 > uint64(math.MaxInt64) {
+					return math.MaxInt64
+				}
+				return int64(amountU64)
+			}(),
+		})
 	}
 
 	rpcURL, rpcUser, rpcPass, err := rpc.resolved()
@@ -177,7 +186,17 @@ func runWithdraw(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInvalidRequest), "amount overflow")
 	}
 	if accountBal < total {
-		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInsufficientBalance), "INSUFFICIENT_BALANCE")
+		maxAmount := int64(0)
+		if accountBal > 0 && accountBal > int64(fee) {
+			maxAmount = accountBal - int64(fee)
+		}
+		return writeErrWithDetails(stdout, stderr, common.jsonOut, string(types.ErrCodeInsufficientBalance), "INSUFFICIENT_BALANCE", map[string]any{
+			"account_id":           accountID,
+			"account_balance_zat":  accountBal,
+			"requested_amount_zat": int64(amountU64),
+			"fee_zat":              int64(fee),
+			"max_amount_zat":       maxAmount,
+		})
 	}
 
 	if strings.TrimSpace(txsignBin) == "" {

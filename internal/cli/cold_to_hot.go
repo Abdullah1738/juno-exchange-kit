@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -153,9 +154,16 @@ func runColdToHotPlan(args []string, stdout, stderr io.Writer) int {
 		ExpiryOffset:     uint32(expiryOffset),
 	}, []txplan.Output{{ToAddress: hotToAddr, AmountZat: amountU64}}, coldChangeAddr)
 	if err != nil {
+		maxAmountZat, spendableZat, spendableNotes := coldMaxSendable(ctx, junocashd.New(rpcURL, rpcUser, rpcPass), sc, minconf)
+
 		var ce types.CodedError
 		if errors.As(err, &ce) && ce.Code == types.ErrCodeNoLiquidityInHot {
-			return writeErr(stdout, stderr, common.jsonOut, "no_liquidity_in_cold", "NO_LIQUIDITY_IN_COLD")
+			return writeErrWithDetails(stdout, stderr, common.jsonOut, "no_liquidity_in_cold", "NO_LIQUIDITY_IN_COLD", map[string]any{
+				"requested_amount_zat": int64(amountU64),
+				"max_amount_zat":       maxAmountZat,
+				"spendable_zat":        spendableZat,
+				"spendable_notes":      spendableNotes,
+			})
 		}
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeInvalidRequest), err.Error())
 	}
@@ -174,6 +182,82 @@ func runColdToHotPlan(args []string, stdout, stderr io.Writer) int {
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(plan)
 	return 0
+}
+
+func coldMaxSendable(ctx context.Context, rpc *junocashd.Client, sc *junoscan.Client, minconf int64) (maxAmountZat int64, spendableZat int64, spendableNotes int) {
+	if rpc == nil || sc == nil || ctx == nil {
+		return 0, 0, 0
+	}
+	if minconf < 0 {
+		minconf = 0
+	}
+
+	info, err := rpc.GetBlockchainInfo(ctx)
+	if err != nil {
+		return 0, 0, 0
+	}
+	tip := info.Blocks
+	if tip < 0 {
+		return 0, 0, 0
+	}
+
+	raw, err := sc.ListWalletNotes(ctx, "cold", true)
+	if err != nil {
+		return 0, 0, 0
+	}
+
+	const maxNotesPerTx = 200
+	values := make([]int64, 0, len(raw))
+	for _, n := range raw {
+		if n.Position == nil || *n.Position < 0 {
+			continue
+		}
+		if n.Height < 0 || tip < n.Height {
+			continue
+		}
+		if minconf > 0 {
+			conf := tip - n.Height + 1
+			if conf < minconf {
+				continue
+			}
+		}
+		if n.ActionIndex < 0 {
+			continue
+		}
+		if n.ValueZat <= 0 {
+			continue
+		}
+		values = append(values, n.ValueZat)
+	}
+
+	sort.Slice(values, func(i, j int) bool { return values[i] > values[j] })
+	if len(values) > maxNotesPerTx {
+		values = values[:maxNotesPerTx]
+	}
+
+	var total int64
+	for _, v := range values {
+		if v > 0 && v > (int64(^uint64(0)>>1)-total) {
+			return 0, 0, 0
+		}
+		total += v
+	}
+	if total < 0 {
+		return 0, 0, 0
+	}
+
+	feeU64, err := txplan.RequiredFeeSend(len(values), 1)
+	if err != nil || feeU64 > uint64(^uint64(0)>>1) {
+		return 0, 0, 0
+	}
+	fee := int64(feeU64)
+
+	maxAmount := int64(0)
+	if total > fee {
+		maxAmount = total - fee
+	}
+
+	return maxAmount, total, len(values)
 }
 
 func runColdToHotSign(args []string, stdout, stderr io.Writer) int {

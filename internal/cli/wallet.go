@@ -138,11 +138,7 @@ func runWalletBalance(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 
-	if minconf == 0 {
-		fmt.Fprintf(stdout, "%s total_unspent_zat=%d notes=%d\n", walletID, total, unspentNotes)
-		return 0
-	}
-	fmt.Fprintf(stdout, "%s total_unspent_zat=%d spendable_zat=%d minconf=%d tip_height=%d\n", walletID, total, spendable, minconf, tipHeight)
+	fmt.Fprintf(stdout, "%s total_unspent_zat=%d spendable_zat=%d unspent_notes=%d spendable_notes=%d minconf=%d tip_height=%d\n", walletID, total, spendable, unspentNotes, spendableNotes, minconf, tipHeight)
 	return 0
 }
 

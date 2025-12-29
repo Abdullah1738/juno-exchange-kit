@@ -129,8 +129,8 @@ func runBalances(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "assets_zat=%d liabilities_zat=%d equity_zat=%d\n", assets, liabilities, equity)
-	fmt.Fprintf(stdout, "hot total_unspent_zat=%d spendable_zat=%d deposit_addresses=%d\n", hot.TotalUnspentZat, hot.SpendableZat, hotDepositCount)
-	fmt.Fprintf(stdout, "cold total_unspent_zat=%d spendable_zat=%d\n", cold.TotalUnspentZat, cold.SpendableZat)
+	fmt.Fprintf(stdout, "hot total_unspent_zat=%d spendable_zat=%d unspent_notes=%d spendable_notes=%d deposit_addresses=%d\n", hot.TotalUnspentZat, hot.SpendableZat, hot.UnspentNotes, hot.SpendableNotes, hotDepositCount)
+	fmt.Fprintf(stdout, "cold total_unspent_zat=%d spendable_zat=%d unspent_notes=%d spendable_notes=%d\n", cold.TotalUnspentZat, cold.SpendableZat, cold.UnspentNotes, cold.SpendableNotes)
 	return 0
 }
 
@@ -189,4 +189,3 @@ func walletBalanceSummary(ctx context.Context, sc *junoscan.Client, walletID str
 		SpendableNotes:  spendableNotes,
 	}, nil
 }
-

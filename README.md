@@ -24,20 +24,42 @@ Bring up `junocashd` + `juno-scan` + `juno-broadcast`:
 
 - `make up`
 
+Networks:
+
+- Regtest (default): `make up` or `make up-regtest`
+- Testnet: `make up-testnet`
+- Mainnet: `make up-mainnet` (will take significant time/disk to sync)
+
 Tear down (also removes volumes):
 
 - `make down`
 
 Defaults:
 
-- `junocashd` RPC: `http://127.0.0.1:18232` (user/pass: `rpcuser` / `rpcpass`)
-- `juno-scan` API: `http://127.0.0.1:18080`
-- `juno-broadcast` API: `http://127.0.0.1:18081`
+- `junocashd` RPC: `http://127.0.0.1:${JUNO_RPC_PORT_HOST:-18232}` (user/pass: `rpcuser` / `rpcpass`)
+- `juno-scan` API: `http://127.0.0.1:${JUNO_SCAN_PORT_HOST:-18080}`
+- `juno-broadcast` API: `http://127.0.0.1:${JUNO_BROADCAST_PORT_HOST:-18081}`
 
 Optional overrides:
 
-- `JUNO_SCAN_CONFIRMATIONS=1` (useful on regtest to get `DepositConfirmed` quickly)
-- `JUNO_SCAN_REF` / `JUNO_BROADCAST_REF` to change the pinned git ref used for Docker builds
+- `JUNO_RPC_PORT_HOST`, `JUNO_SCAN_PORT_HOST`, `JUNO_BROADCAST_PORT_HOST` (change host ports if something is already bound)
+- `JUNO_CHAIN=regtest|testnet|mainnet` (defaults to `regtest`)
+- `JUNOCASH_VERSION`, `JUNO_SCAN_REF`, `JUNO_BROADCAST_REF` (pins Docker builds)
+- `JUNO_SCAN_CONFIRMATIONS` (defaults: `1` on regtest, `100` otherwise)
+
+Note: `make up` builds the dependency images with `docker build` and runs Compose with `--no-build` to avoid `buildx`/cloud builder limits.
+
+## Regtest controls (Docker)
+
+The `junocashd` container includes a `juno-cli` helper that is preconfigured for the running chain + RPC creds.
+
+Examples:
+
+- Mine blocks: `docker compose exec junocashd juno-cli generate 101`
+- Create a new unified account: `docker compose exec junocashd juno-cli z_getnewaccount`
+- Get a deposit address for account 0: `docker compose exec junocashd juno-cli z_getaddressforaccount 0`
+- Shield coinbase to an address: `docker compose exec junocashd juno-cli z_shieldcoinbase "*" "<j...>"`
+- Poll async ops: `docker compose exec junocashd juno-cli z_getoperationresult '["<opid>"]'`
 
 ## Build and run
 
@@ -57,6 +79,8 @@ export JUNO_BROADCAST_URL="http://127.0.0.1:18081"
 
 export JUNO_TXSIGN_BIN="/path/to/juno-txsign"
 ```
+
+If you override host ports (e.g. `JUNO_RPC_PORT_HOST`), update the URLs above to match.
 
 Commands:
 

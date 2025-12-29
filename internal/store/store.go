@@ -177,6 +177,24 @@ func (s *Store) CreateAccount(ctx context.Context) (string, error) {
 	return accountID, nil
 }
 
+func (s *Store) AccountBalance(ctx context.Context, accountID string) (int64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.Init(ctx); err != nil {
+		return 0, err
+	}
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return 0, errors.New("store: account_id required")
+	}
+	var bal int64
+	if err := s.db.QueryRowContext(ctx, `SELECT balance_zat FROM account_balances WHERE account_id=?`, accountID).Scan(&bal); err != nil {
+		return 0, err
+	}
+	return bal, nil
+}
+
 func (s *Store) UpsertWallet(ctx context.Context, walletID string, ufvk string, seedPath string) error {
 	if ctx == nil {
 		ctx = context.Background()

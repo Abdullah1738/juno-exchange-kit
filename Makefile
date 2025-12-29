@@ -1,4 +1,4 @@
-.PHONY: build rust-build rust-test test test-unit test-integration test-e2e fmt tidy clean
+.PHONY: build rust-build rust-test test test-unit test-integration test-e2e fmt tidy clean up down logs
 
 TESTFLAGS ?=
 
@@ -10,6 +10,7 @@ BIN_DIR := bin
 BIN := $(BIN_DIR)/juno-exchange-kit
 
 RUST_MANIFEST := rust/keys/Cargo.toml
+DOCKER_COMPOSE := docker compose -f docker-compose.yml
 
 build: rust-build
 	@mkdir -p $(BIN_DIR)
@@ -43,3 +44,12 @@ tidy:
 clean:
 	rm -rf $(BIN_DIR)
 	rm -rf rust/keys/target
+
+up:
+	$(DOCKER_COMPOSE) up -d --build
+
+down:
+	$(DOCKER_COMPOSE) down -v
+
+logs:
+	$(DOCKER_COMPOSE) logs -f --tail=200

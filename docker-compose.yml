@@ -1,0 +1,103 @@
+services:
+  junocashd:
+    container_name: juno-exchange-kit-junocashd
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/junocashd/Dockerfile
+      args:
+        JUNOCASH_VERSION: 0.9.7
+    command:
+      - -regtest
+      - -server=1
+      - -txindex=1
+      - -daemon=0
+      - -listen=0
+      - -printtoconsole=1
+      - -datadir=/data
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=0.0.0.0/0
+      - -rpcport=8232
+      - -rpcuser=rpcuser
+      - -rpcpassword=rpcpass
+    ports:
+      - "18232:8232"
+    volumes:
+      - junocashd-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "junocash-cli",
+          "-regtest",
+          "-datadir=/data",
+          "-rpcuser=rpcuser",
+          "-rpcpassword=rpcpass",
+          "-rpcport=8232",
+          "getblockcount",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  juno-broadcast:
+    container_name: juno-exchange-kit-broadcast
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/juno-broadcast/Dockerfile
+      args:
+        JUNO_BROADCAST_REF: ${JUNO_BROADCAST_REF:-0be86c29573ea9cd1993358e387686b534d212c8}
+    depends_on:
+      junocashd:
+        condition: service_healthy
+    environment:
+      JUNO_RPC_URL: http://junocashd:8232
+      JUNO_RPC_USER: rpcuser
+      JUNO_RPC_PASS: rpcpass
+    command:
+      - serve
+      - --listen
+      - 0.0.0.0:8080
+    ports:
+      - "18081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  juno-scan:
+    container_name: juno-exchange-kit-scan
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/juno-scan/Dockerfile
+      args:
+        JUNO_SCAN_REF: ${JUNO_SCAN_REF:-95c424b67aa6a8b6e69162bb56bedcfce2edde83}
+    depends_on:
+      junocashd:
+        condition: service_healthy
+    environment:
+      JUNO_SCAN_LISTEN: 0.0.0.0:8080
+      JUNO_SCAN_RPC_URL: http://junocashd:8232
+      JUNO_SCAN_RPC_USER: rpcuser
+      JUNO_SCAN_RPC_PASS: rpcpass
+      JUNO_SCAN_UA_HRP: ${JUNO_SCAN_UA_HRP:-jregtest}
+      JUNO_SCAN_CONFIRMATIONS: ${JUNO_SCAN_CONFIRMATIONS:-100}
+      JUNO_SCAN_DB_DRIVER: rocksdb
+      JUNO_SCAN_DB_PATH: /data/db
+    ports:
+      - "18080:8080"
+    volumes:
+      - junoscan-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/v1/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+volumes:
+  junocashd-data:
+  junoscan-data:
+

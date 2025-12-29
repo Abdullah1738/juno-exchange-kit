@@ -176,7 +176,7 @@ func runSweepConsolidate(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "keys_error", err.Error())
 	}
 
-	plan, fee, err := txplan.PlanSweep(ctx, txplan.SendConfig{
+	plans, _, err := txplan.PlanSweepMany(ctx, txplan.SendConfig{
 		RPC:              deps.rpc,
 		Scan:             deps.scan,
 		Wallet:           "hot",
@@ -184,29 +184,58 @@ func runSweepConsolidate(args []string, stdout, stderr io.Writer) int {
 		Account:          0,
 		MinConfirmations: minconf,
 		ExpiryOffset:     uint32(expiryOffset),
-	}, toAddr, "", toAddr)
+	}, toAddr, "", toAddr, 0)
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeNoLiquidityInHot), err.Error())
 	}
 
-	signed, err := signTxPlan(ctx, deps.txsignBin, deps.hotSeedPath, plan)
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "sign_failed", err.Error())
+	type txOut struct {
+		TxID   string `json:"txid"`
+		FeeZat int64  `json:"fee_zat"`
+	}
+	results := make([]txOut, 0, len(plans))
+
+	signedTxs := make([]string, 0, len(plans))
+	fees := make([]int64, 0, len(plans))
+	for _, p := range plans {
+		signed, err := signTxPlan(ctx, deps.txsignBin, deps.hotSeedPath, p)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "sign_failed", err.Error())
+		}
+		feeI64, err := strconv.ParseInt(strings.TrimSpace(signed.FeeZat), 10, 64)
+		if err != nil || feeI64 < 0 {
+			return writeErr(stdout, stderr, common.jsonOut, "sign_failed", "invalid fee returned by signer")
+		}
+		signedTxs = append(signedTxs, signed.RawTxHex)
+		fees = append(fees, feeI64)
 	}
 
-	var waitPtr *int64
-	if waitConf > 0 {
-		waitPtr = &waitConf
+	// Submit all txs first, then optionally wait. This avoids serial confirmation waits
+	// when multiple txs land in the same block.
+	txids := make([]string, 0, len(signedTxs))
+	for i, raw := range signedTxs {
+		sub, err := deps.bcast.Submit(ctx, raw, nil)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+		}
+		txids = append(txids, sub.TxID)
+		results = append(results, txOut{TxID: sub.TxID, FeeZat: fees[i]})
 	}
-	sub, err := deps.bcast.Submit(ctx, signed.RawTxHex, waitPtr)
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+
+	if waitConf > 0 {
+		for _, txid := range txids {
+			if _, err := deps.bcast.WaitForConfirmations(ctx, txid, waitConf); err != nil {
+				return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+			}
+		}
 	}
 
 	if common.jsonOut {
-		return writeOK(stdout, true, map[string]any{"txid": sub.TxID, "fee_zat": fee, "kind": "consolidate"})
+		return writeOK(stdout, true, map[string]any{"txs": results, "kind": "consolidate"})
 	}
-	fmt.Fprintln(stdout, sub.TxID)
+	for _, r := range results {
+		fmt.Fprintln(stdout, r.TxID)
+	}
 	return 0
 }
 
@@ -260,7 +289,7 @@ func runSweepToCold(args []string, stdout, stderr io.Writer) int {
 		return writeErr(stdout, stderr, common.jsonOut, "keys_error", err.Error())
 	}
 
-	plan, fee, err := txplan.PlanSweep(ctx, txplan.SendConfig{
+	plans, _, err := txplan.PlanSweepMany(ctx, txplan.SendConfig{
 		RPC:              deps.rpc,
 		Scan:             deps.scan,
 		Wallet:           "hot",
@@ -268,28 +297,55 @@ func runSweepToCold(args []string, stdout, stderr io.Writer) int {
 		Account:          0,
 		MinConfirmations: minconf,
 		ExpiryOffset:     uint32(expiryOffset),
-	}, coldAddr, "", coldAddr)
+	}, coldAddr, "", coldAddr, 0)
 	if err != nil {
 		return writeErr(stdout, stderr, common.jsonOut, string(types.ErrCodeNoLiquidityInHot), err.Error())
 	}
 
-	signed, err := signTxPlan(ctx, deps.txsignBin, deps.hotSeedPath, plan)
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "sign_failed", err.Error())
+	type txOut struct {
+		TxID   string `json:"txid"`
+		FeeZat int64  `json:"fee_zat"`
+	}
+	results := make([]txOut, 0, len(plans))
+
+	signedTxs := make([]string, 0, len(plans))
+	fees := make([]int64, 0, len(plans))
+	for _, p := range plans {
+		signed, err := signTxPlan(ctx, deps.txsignBin, deps.hotSeedPath, p)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "sign_failed", err.Error())
+		}
+		feeI64, err := strconv.ParseInt(strings.TrimSpace(signed.FeeZat), 10, 64)
+		if err != nil || feeI64 < 0 {
+			return writeErr(stdout, stderr, common.jsonOut, "sign_failed", "invalid fee returned by signer")
+		}
+		signedTxs = append(signedTxs, signed.RawTxHex)
+		fees = append(fees, feeI64)
 	}
 
-	var waitPtr *int64
-	if waitConf > 0 {
-		waitPtr = &waitConf
+	txids := make([]string, 0, len(signedTxs))
+	for i, raw := range signedTxs {
+		sub, err := deps.bcast.Submit(ctx, raw, nil)
+		if err != nil {
+			return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+		}
+		txids = append(txids, sub.TxID)
+		results = append(results, txOut{TxID: sub.TxID, FeeZat: fees[i]})
 	}
-	sub, err := deps.bcast.Submit(ctx, signed.RawTxHex, waitPtr)
-	if err != nil {
-		return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+
+	if waitConf > 0 {
+		for _, txid := range txids {
+			if _, err := deps.bcast.WaitForConfirmations(ctx, txid, waitConf); err != nil {
+				return writeErr(stdout, stderr, common.jsonOut, "broadcast_failed", err.Error())
+			}
+		}
 	}
 
 	if common.jsonOut {
-		return writeOK(stdout, true, map[string]any{"txid": sub.TxID, "fee_zat": fee, "kind": "to_cold"})
+		return writeOK(stdout, true, map[string]any{"txs": results, "kind": "to_cold"})
 	}
-	fmt.Fprintln(stdout, sub.TxID)
+	for _, r := range results {
+		fmt.Fprintln(stdout, r.TxID)
+	}
 	return 0
 }

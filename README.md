@@ -67,6 +67,18 @@ Build:
 
 - `make build` (outputs `bin/juno-exchange-kit`)
 
+## Dynamic library path (Linux)
+
+`juno-exchange-kit` uses CGO and links against a Rust shared library built under `rust/keys/target/release`.
+
+If you see an error like `libjuno_keys.so: cannot open shared object file`, export `LD_LIBRARY_PATH`:
+
+```sh
+export LD_LIBRARY_PATH="$PWD/rust/keys/target/release${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+Note: if you run `juno-txsign` from the same shell (it is required for withdrawal signing), it may also need its own Rust library paths in `LD_LIBRARY_PATH`. See `juno-txsign/README.md`.
+
 ## Data dir per network (important)
 
 The exchange kit stores keys + state in a local data dir. Do **not** reuse the same data dir across networks.

@@ -1,7 +1,7 @@
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-github.com/Abdullah1738/juno-sdk-go v0.0.0-20251229054749-2b65e857fd17 h1:j+wWPA3JGFC7s7pyUQvkW34STMWBY/KRigAfMFCO43Q=
-github.com/Abdullah1738/juno-sdk-go v0.0.0-20251229054749-2b65e857fd17/go.mod h1:+pT+1n+l4nSgUm1hgeOHU0hUC6v5JheEv8Yqlv5OF8U=
+github.com/Abdullah1738/juno-sdk-go v0.0.0-20260121150510-05fe59726542 h1:CJES4x7wWYL92BdVmascxn5yIE0Rz2UL/Fs92ppvzZY=
+github.com/Abdullah1738/juno-sdk-go v0.0.0-20260121150510-05fe59726542/go.mod h1:+pT+1n+l4nSgUm1hgeOHU0hUC6v5JheEv8Yqlv5OF8U=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 h1:UQHMgLO+TxOElx5B5HZ4hJQsoJ/PvUvKRhJHDQXO8P8=

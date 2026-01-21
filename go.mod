@@ -3,7 +3,7 @@ module github.com/Abdullah1738/juno-exchange-kit
 go 1.24.0
 
 require (
-	github.com/Abdullah1738/juno-sdk-go v0.0.0-20251229054749-2b65e857fd17
+	github.com/Abdullah1738/juno-sdk-go v0.0.0-20260121150510-05fe59726542
 	github.com/docker/docker v28.5.1+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/testcontainers/testcontainers-go v0.40.0

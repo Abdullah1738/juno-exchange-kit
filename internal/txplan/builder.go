@@ -429,6 +429,9 @@ func listSpendableNotes(ctx context.Context, sc *junoscan.Client, walletID strin
 	}
 	out := make([]spendableNote, 0, len(raw))
 	for _, n := range raw {
+		if n.PendingSpentTxID != nil && strings.TrimSpace(*n.PendingSpentTxID) != "" {
+			continue
+		}
 		if n.Position == nil || *n.Position < 0 {
 			continue
 		}

@@ -5,7 +5,7 @@ chain="${JUNO_CHAIN:-regtest}"
 
 case "$chain" in
   regtest)
-    exec junocashd -regtest -listen=0 "$@"
+    exec junocashd -regtest -listen=0 -txunpaidactionlimit=10000 -blockunpaidactionlimit=0 -txexpirydelta=4 -blockmintxfee=0 "$@"
     ;;
   testnet)
     exec junocashd -testnet -listen=1 "$@"
@@ -18,4 +18,3 @@ case "$chain" in
     exit 2
     ;;
 esac
-

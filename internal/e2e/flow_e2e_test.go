@@ -197,8 +197,19 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	}
 
 	// Sweep hot funds to cold; account balance stays credited, but hot liquidity is gone.
-	mustRunKitOK(t, ctx, bin, env, nil, "sweep", "to-cold", "--wait-confirmations", "0", "--json")
-	mustRunCLI(t, ctx, stack, "generate", "1")
+	var sweepToCold struct {
+		Status string `json:"status"`
+		Data   struct {
+			Txs []struct {
+				TxID string `json:"txid"`
+			} `json:"txs"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &sweepToCold, "sweep", "to-cold", "--wait-confirmations", "0", "--json")
+	for _, sub := range sweepToCold.Data.Txs {
+		mineUntilConfirmed(t, ctx, stack, sub.TxID)
+	}
 
 	sc, err := junoscan.New(stack.ScanURL)
 	if err != nil {
@@ -267,8 +278,15 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	if strings.TrimSpace(signResp.Data.RawTxHex) == "" {
 		t.Fatalf("missing raw tx hex from sign")
 	}
-	mustRunKitOK(t, ctx, bin, env, nil, "cold-to-hot", "broadcast", "--raw-tx-hex", strings.TrimSpace(signResp.Data.RawTxHex), "--wait-confirmations", "0", "--json")
-	mustRunCLI(t, ctx, stack, "generate", "1")
+	var coldToHotBroadcast struct {
+		Status string `json:"status"`
+		Data   struct {
+			TxID string `json:"txid"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	mustRunKitOKInto(t, ctx, bin, env, nil, &coldToHotBroadcast, "cold-to-hot", "broadcast", "--raw-tx-hex", strings.TrimSpace(signResp.Data.RawTxHex), "--wait-confirmations", "0", "--json")
+	mineUntilConfirmed(t, ctx, stack, coldToHotBroadcast.Data.TxID)
 	waitForHotNotesAtLeast(t, ctx, sc, 1)
 
 	// Withdraw should succeed now.
@@ -301,7 +319,7 @@ func TestExchangeKit_DepositSweepColdToHotWithdraw_E2E(t *testing.T) {
 	if strings.TrimSpace(withdrawOK.Data.TxID) == "" || withdrawOK.Data.FeeZat <= 0 || withdrawOK.Data.Wallet != "hot" {
 		t.Fatalf("unexpected withdraw response: %+v", withdrawOK)
 	}
-	mustRunCLI(t, ctx, stack, "generate", "1")
+	mineUntilConfirmed(t, ctx, stack, withdrawOK.Data.TxID)
 	mustRunKitOK(t, ctx, bin, env, nil, "sync", "--json")
 
 	var balAfter struct {
@@ -489,6 +507,38 @@ func mustCreateOrchardAddress(t *testing.T, ctx context.Context, stack *testutil
 		t.Fatalf("z_getaddressforaccount: %v\n%s", err, string(out))
 	}
 	return strings.TrimSpace(addrResp.Address)
+}
+
+func mineUntilConfirmed(t *testing.T, ctx context.Context, stack *testutil.Stack, txid string) {
+	t.Helper()
+
+	txid = strings.TrimSpace(txid)
+	if txid == "" {
+		t.Fatalf("missing txid")
+	}
+
+	_, _, _ = stack.Junocashd.CLI(ctx, "prioritisetransaction", txid, "0", "100000000")
+
+	deadline := time.Now().Add(2 * time.Minute)
+	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
+	}
+
+	for time.Now().Before(deadline) {
+		out, _, err := stack.Junocashd.CLI(ctx, "getrawtransaction", txid, "1")
+		if err == nil {
+			var tx struct {
+				BlockHash     string `json:"blockhash"`
+				Confirmations int64  `json:"confirmations"`
+			}
+			if err := json.Unmarshal(out, &tx); err == nil && strings.TrimSpace(tx.BlockHash) != "" && tx.Confirmations > 0 {
+				return
+			}
+		}
+		mustRunCLI(t, ctx, stack, "generate", "1")
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for tx confirmation: %s", txid)
 }
 
 func itoa(n int64) string {

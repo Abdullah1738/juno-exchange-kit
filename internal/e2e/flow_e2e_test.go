@@ -387,14 +387,18 @@ func waitForHotNotes(t *testing.T, ctx context.Context, sc *junoscan.Client, wan
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Minute)
+	var lastNotes []junoscan.WalletNote
+	var lastErr error
 	for time.Now().Before(deadline) {
 		notes, err := sc.ListWalletNotes(ctx, "hot", true)
 		if err == nil && len(notes) == want {
 			return
 		}
+		lastNotes = notes
+		lastErr = err
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatalf("timeout waiting for hot notes=%d", want)
+	t.Fatalf("timeout waiting for hot notes=%d; last_err=%v last_notes=%+v", want, lastErr, lastNotes)
 }
 
 func waitForHotNotesAtLeast(t *testing.T, ctx context.Context, sc *junoscan.Client, min int) {

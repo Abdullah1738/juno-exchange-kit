@@ -113,16 +113,24 @@ func StartStack(ctx context.Context, dataDir string, cfg StartStackConfig) (*Sta
 	readyCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := WaitForHTTP200(readyCtx, broadcastURL+"/healthz"); err != nil {
+		logs := bcastProc.Logs()
 		_ = scProc.Terminate(context.Background())
 		_ = bcastProc.Terminate(context.Background())
 		_ = jd.Terminate(context.Background())
-		return nil, err
+		if logs != "" {
+			return nil, fmt.Errorf("broadcast health: %w\n%s", err, logs)
+		}
+		return nil, fmt.Errorf("broadcast health: %w", err)
 	}
 	if err := WaitForHTTP200(readyCtx, scanURL+"/v1/health"); err != nil {
+		logs := scProc.Logs()
 		_ = scProc.Terminate(context.Background())
 		_ = bcastProc.Terminate(context.Background())
 		_ = jd.Terminate(context.Background())
-		return nil, err
+		if logs != "" {
+			return nil, fmt.Errorf("scan health: %w\n%s", err, logs)
+		}
+		return nil, fmt.Errorf("scan health: %w", err)
 	}
 
 	return &Stack{

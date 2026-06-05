@@ -12,7 +12,7 @@ BIN := $(BIN_DIR)/juno-exchange-kit
 RUST_MANIFEST := rust/keys/Cargo.toml
 DOCKER_COMPOSE := docker compose -f docker-compose.yml
 
-JUNOCASH_VERSION ?= 0.9.9
+JUNOCASH_VERSION ?= 0.9.12
 JUNO_SCAN_REF ?= 8e40d26577be1e946823ab3f380be5baf8a1dccd
 JUNO_BROADCAST_REF ?= 8ebde3332f7509b43f85ab1d1d57b289056bca30
 

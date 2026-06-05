@@ -2,12 +2,12 @@ services:
   junocashd:
     container_name: juno-exchange-kit-junocashd
     platform: linux/amd64
-    image: juno-exchange-kit/junocashd:${JUNOCASH_VERSION:-0.9.9}
+    image: juno-exchange-kit/junocashd:${JUNOCASH_VERSION:-0.9.12}
     build:
       context: .
       dockerfile: docker/junocashd/Dockerfile
       args:
-        JUNOCASH_VERSION: ${JUNOCASH_VERSION:-0.9.9}
+        JUNOCASH_VERSION: ${JUNOCASH_VERSION:-0.9.12}
     environment:
       JUNO_CHAIN: ${JUNO_CHAIN:-regtest}
       JUNO_DATADIR: /data

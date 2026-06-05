@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	build "github.com/docker/docker/api/types/build"
@@ -21,6 +22,7 @@ const (
 	defaultJunocashVersion = "0.9.12"
 	defaultRPCUser         = "rpcuser"
 	defaultRPCPassword     = "rpcpass"
+	junocashdImageEnv      = "JUNO_TEST_JUNOCASHD_IMAGE"
 )
 
 type Junocashd struct {
@@ -37,47 +39,7 @@ func StartJunocashd(ctx context.Context) (*Junocashd, error) {
 	rpcUser := defaultRPCUser
 	rpcPass := defaultRPCPassword
 
-	req := testcontainers.ContainerRequest{
-		ImagePlatform: "linux/amd64",
-		FromDockerfile: testcontainers.FromDockerfile{
-			Context:    repoRoot(),
-			Dockerfile: "docker/junocashd/Dockerfile",
-			BuildArgs: map[string]*string{
-				"JUNOCASH_VERSION": &version,
-			},
-			BuildOptionsModifier: func(opts *build.ImageBuildOptions) {
-				opts.Platform = "linux/amd64"
-				opts.Version = build.BuilderBuildKit
-			},
-		},
-		Env: map[string]string{
-			"JUNO_CHAIN":    "regtest",
-			"JUNO_DATADIR":  "/data",
-			"JUNO_RPC_USER": rpcUser,
-			"JUNO_RPC_PASS": rpcPass,
-			"JUNO_RPC_PORT": "8232",
-		},
-		ExposedPorts: []string{"8232/tcp"},
-		Cmd: []string{
-			"-server=1",
-			"-txindex=1",
-			"-daemon=0",
-			"-printtoconsole=1",
-			"-datadir=/data",
-			"-rpcbind=0.0.0.0",
-			"-rpcallowip=0.0.0.0/0",
-			"-rpcport=8232",
-			"-rpcuser=" + rpcUser,
-			"-rpcpassword=" + rpcPass,
-		},
-		WaitingFor: wait.ForListeningPort(nat.Port("8232/tcp")).WithStartupTimeout(90 * time.Second),
-	}
-	if os.Getenv("JUNO_TEST_LOG") != "" {
-		req.FromDockerfile.BuildLogWriter = os.Stdout
-		req.LogConsumerCfg = &testcontainers.LogConsumerConfig{
-			Consumers: []testcontainers.LogConsumer{&testcontainers.StdoutLogConsumer{}},
-		}
-	}
+	req := newJunocashdRequest(version, rpcUser, rpcPass, os.Getenv(junocashdImageEnv), os.Getenv("JUNO_TEST_LOG") != "")
 
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
@@ -113,6 +75,57 @@ func StartJunocashd(ctx context.Context) (*Junocashd, error) {
 	}
 
 	return j, nil
+}
+
+func newJunocashdRequest(version, rpcUser, rpcPass, image string, logEnabled bool) testcontainers.ContainerRequest {
+	req := testcontainers.ContainerRequest{
+		Env: map[string]string{
+			"JUNO_CHAIN":    "regtest",
+			"JUNO_DATADIR":  "/data",
+			"JUNO_RPC_USER": rpcUser,
+			"JUNO_RPC_PASS": rpcPass,
+			"JUNO_RPC_PORT": "8232",
+		},
+		ExposedPorts: []string{"8232/tcp"},
+		Cmd: []string{
+			"-server=1",
+			"-txindex=1",
+			"-daemon=0",
+			"-printtoconsole=1",
+			"-datadir=/data",
+			"-rpcbind=0.0.0.0",
+			"-rpcallowip=0.0.0.0/0",
+			"-rpcport=8232",
+			"-rpcuser=" + rpcUser,
+			"-rpcpassword=" + rpcPass,
+		},
+		WaitingFor: wait.ForListeningPort(nat.Port("8232/tcp")).WithStartupTimeout(90 * time.Second),
+	}
+	if image = strings.TrimSpace(image); image != "" {
+		req.Image = image
+	} else {
+		req.ImagePlatform = "linux/amd64"
+		req.FromDockerfile = testcontainers.FromDockerfile{
+			Context:    repoRoot(),
+			Dockerfile: "docker/junocashd/Dockerfile",
+			BuildArgs: map[string]*string{
+				"JUNOCASH_VERSION": &version,
+			},
+			BuildOptionsModifier: func(opts *build.ImageBuildOptions) {
+				opts.Platform = "linux/amd64"
+				opts.Version = build.BuilderBuildKit
+			},
+		}
+	}
+	if logEnabled && req.Image == "" {
+		req.FromDockerfile.BuildLogWriter = os.Stdout
+	}
+	if logEnabled {
+		req.LogConsumerCfg = &testcontainers.LogConsumerConfig{
+			Consumers: []testcontainers.LogConsumer{&testcontainers.StdoutLogConsumer{}},
+		}
+	}
+	return req
 }
 
 func (j *Junocashd) Terminate(ctx context.Context) error {

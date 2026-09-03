@@ -2,12 +2,12 @@ services:
   junocashd:
     container_name: juno-exchange-kit-junocashd
     platform: linux/amd64
-    image: juno-exchange-kit/junocashd:${JUNOCASH_VERSION:-0.9.12}
+    image: juno-exchange-kit/junocashd:${JUNOCASH_VERSION:-0.9.13}
     build:
       context: .
       dockerfile: docker/junocashd/Dockerfile
       args:
-        JUNOCASH_VERSION: ${JUNOCASH_VERSION:-0.9.12}
+        JUNOCASH_VERSION: ${JUNOCASH_VERSION:-0.9.13}
     environment:
       JUNO_CHAIN: ${JUNO_CHAIN:-regtest}
       JUNO_DATADIR: /data
@@ -38,12 +38,12 @@ services:
   juno-broadcast:
     container_name: juno-exchange-kit-broadcast
     platform: linux/amd64
-    image: juno-exchange-kit/juno-broadcast:${JUNO_BROADCAST_REF:-8ebde3332f7509b43f85ab1d1d57b289056bca30}
+    image: juno-exchange-kit/juno-broadcast:${JUNO_BROADCAST_REF:-76689b4d23bd27d0947f91aa7abccf8075c9782f}
     build:
       context: .
       dockerfile: docker/juno-broadcast/Dockerfile
       args:
-        JUNO_BROADCAST_REF: ${JUNO_BROADCAST_REF:-8ebde3332f7509b43f85ab1d1d57b289056bca30}
+        JUNO_BROADCAST_REF: ${JUNO_BROADCAST_REF:-76689b4d23bd27d0947f91aa7abccf8075c9782f}
     depends_on:
       junocashd:
         condition: service_healthy
@@ -66,12 +66,12 @@ services:
   juno-scan:
     container_name: juno-exchange-kit-scan
     platform: linux/amd64
-    image: juno-exchange-kit/juno-scan:${JUNO_SCAN_REF:-8e40d26577be1e946823ab3f380be5baf8a1dccd}
+    image: juno-exchange-kit/juno-scan:${JUNO_SCAN_REF:-fcd02df03cf09b482f95be070b8fa9894d5c0222}
     build:
       context: .
       dockerfile: docker/juno-scan/Dockerfile
       args:
-        JUNO_SCAN_REF: ${JUNO_SCAN_REF:-8e40d26577be1e946823ab3f380be5baf8a1dccd}
+        JUNO_SCAN_REF: ${JUNO_SCAN_REF:-fcd02df03cf09b482f95be070b8fa9894d5c0222}
     depends_on:
       junocashd:
         condition: service_healthy

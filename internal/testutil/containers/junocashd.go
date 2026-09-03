@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultJunocashVersion = "0.9.12"
+	defaultJunocashVersion = "0.9.13"
 	defaultRPCUser         = "rpcuser"
 	defaultRPCPassword     = "rpcpass"
 	junocashdImageEnv      = "JUNO_TEST_JUNOCASHD_IMAGE"
@@ -99,7 +99,7 @@ func newJunocashdRequest(version, rpcUser, rpcPass, image string, logEnabled boo
 			"-rpcuser=" + rpcUser,
 			"-rpcpassword=" + rpcPass,
 		},
-		WaitingFor: wait.ForListeningPort(nat.Port("8232/tcp")).WithStartupTimeout(90 * time.Second),
+		WaitingFor: wait.ForListeningPort(nat.Port("8232/tcp")).WithStartupTimeout(3 * time.Minute),
 	}
 	if image = strings.TrimSpace(image); image != "" {
 		req.Image = image

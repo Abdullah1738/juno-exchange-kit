@@ -3,7 +3,7 @@ package containers
 import "testing"
 
 func TestNewJunocashdRequestUsesPrebuiltImage(t *testing.T) {
-	req := newJunocashdRequest("0.9.12", "rpcuser", "rpcpass", " local/junocashd:test ", true)
+	req := newJunocashdRequest("0.9.13", "rpcuser", "rpcpass", " local/junocashd:test ", true)
 
 	if req.Image != "local/junocashd:test" {
 		t.Fatalf("Image = %q, want prebuilt image", req.Image)
@@ -20,7 +20,7 @@ func TestNewJunocashdRequestUsesPrebuiltImage(t *testing.T) {
 }
 
 func TestNewJunocashdRequestBuildsDockerfileByDefault(t *testing.T) {
-	req := newJunocashdRequest("0.9.12", "rpcuser", "rpcpass", "", false)
+	req := newJunocashdRequest("0.9.13", "rpcuser", "rpcpass", "", false)
 
 	if req.Image != "" {
 		t.Fatalf("Image = %q, want empty for Dockerfile build", req.Image)

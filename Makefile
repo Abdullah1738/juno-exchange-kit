@@ -12,9 +12,9 @@ BIN := $(BIN_DIR)/juno-exchange-kit
 RUST_MANIFEST := rust/keys/Cargo.toml
 DOCKER_COMPOSE := docker compose -f docker-compose.yml
 
-JUNOCASH_VERSION ?= 0.9.12
-JUNO_SCAN_REF ?= 8e40d26577be1e946823ab3f380be5baf8a1dccd
-JUNO_BROADCAST_REF ?= 8ebde3332f7509b43f85ab1d1d57b289056bca30
+JUNOCASH_VERSION ?= 0.9.13
+JUNO_SCAN_REF ?= fcd02df03cf09b482f95be070b8fa9894d5c0222
+JUNO_BROADCAST_REF ?= 76689b4d23bd27d0947f91aa7abccf8075c9782f
 
 NETWORK_GOAL := $(firstword $(filter mainnet testnet regtest,$(MAKECMDGOALS)))
 

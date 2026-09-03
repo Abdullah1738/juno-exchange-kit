@@ -5,7 +5,7 @@ chain="${JUNO_CHAIN:-regtest}"
 
 case "$chain" in
   regtest)
-    exec junocashd -regtest -listen=0 -txunpaidactionlimit=10000 -blockunpaidactionlimit=0 -txexpirydelta=4 -blockmintxfee=0 "$@"
+    exec junocashd -regtest -nuparams=5437f330:1 -listen=0 -txunpaidactionlimit=10000 -blockunpaidactionlimit=0 -txexpirydelta=4 -blockmintxfee=0 "$@"
     ;;
   testnet)
     exec junocashd -testnet -listen=1 "$@"
